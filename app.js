@@ -1,7 +1,6 @@
 let s_grade = localStorage.getItem('s_grade');
 let editingId = null;
 let unsubscribe = null;
-
 // إدارة حالة تسجيل الدخول - النسخة المعتمدة على الرتب
 auth.onAuthStateChanged(async (user) => {
     if (user) {
@@ -93,11 +92,13 @@ function updateUserProfile(user) {
 
 async function login() { 
     try {
-        const p = new firebase.auth.GoogleAuthProvider(); 
+        const p = new firebase.auth.GoogleAuthProvider();
         await auth.signInWithPopup(p); 
     } catch (error) {
+        // خطأ popup_closed_by_user يعني المستخدم أغلق النافذة بنفسه - مش مشكلة
+        if (error.code === 'auth/popup-closed-by-user') return;
         console.error("Login Error:", error);
-        showToast("حدثت مشكلة في الاتصال بـ الانترنت ", "error");
+        showToast("حدثت مشكلة في الاتصال بالإنترنت", "error");
     }
 }
 
@@ -171,27 +172,20 @@ function loadLessons(grade) {
         
         querySnapshot.forEach((doc) => {
             const item = doc.data();
+            const lessonId = doc.id;
             const clone = template.content.cloneNode(true);
             const url = item.url;
 
             let thumbnailUrl = "";
-
-            // استخراج صورة يوتيوب
             if (url.includes('youtube.com') || url.includes('youtu.be')) {
                 const videoId = url.split('v=')[1]?.split('&')[0] || url.split('/').pop();
                 thumbnailUrl = `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
-            } 
-            // استخراج صورة جوجل درايف 
-            else if (url.includes('drive.google.com')) {
+            } else if (url.includes('drive.google.com')) {
                 const match = url.match(/\/d\/(.+?)\//);
-                if (match) {
-                    const fileId = match[1];
-                    thumbnailUrl = `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`;
-                }
+                if (match) thumbnailUrl = `https://drive.google.com/thumbnail?id=${match[1]}&sz=w1000`;
             }
 
             const mediaBox = clone.querySelector('.card-media-box');
-            // نضع صورة فقط وليس إطار فيديو لمنع التشغيل داخل الكارت
             mediaBox.innerHTML = `
                 <div class="video-preview-container">
                     <img src="${thumbnailUrl}" class="video-thumb-img" onerror="this.src='https://via.placeholder.com/640x360/111827/FFFFFF?text=Lesson+Video'">
@@ -200,9 +194,19 @@ function loadLessons(grade) {
 
             clone.querySelector('.lesson-name').innerText = item.title;
 
-            // عند الضغط على الكارت بالكامل يفتح الفيديو الكبير
+            // تحميل التقييم
+            const starsContainer = clone.querySelector('.star-rating');
+            if (starsContainer) {
+                starsContainer.setAttribute('data-lesson-id', lessonId);
+                // نحمل التقييم بعد ما الكارت يتضاف في الـ DOM
+                setTimeout(() => loadRating(lessonId, starsContainer), 100);
+            }
+
             const card = clone.querySelector('.lesson-card');
-            card.onclick = () => playVideo(item.url);
+            card.onclick = () => {
+                playVideo(item.url, lessonId, item.title);
+                markWatched(lessonId);
+            };
 
             grid.appendChild(clone);
         });
@@ -474,7 +478,7 @@ function prepareUserEdit(email, role) {
     addBtn.classList.add('bg-green-600');
     
     // سكرول بسيط لفوق عشان تبدأ تعدل
-    document.querySelector('.users-section').scrollIntoView({ behavior: 'smooth' });
+    document.getElementById('section-users').scrollIntoView({ behavior: 'smooth' });
     document.getElementById('new-user-email').focus();
 }
 
@@ -512,26 +516,37 @@ async function deleteUser(email) {
     }
 }
 
-function closeAdmin() { 
-    document.getElementById('admin-modal').style.display = 'none'; 
-    resetAdminForm(); // عشان لو فتحتها تاني متلاقيش بيانات التعديل القديمة
-}
+// closeAdmin معرّفة فوق بشكل كامل
 
-function playVideo(url) { 
+function playVideo(url, lessonId, title) {
+    currentLessonId = lessonId;
+    currentLessonTitle = title;
+
     const frame = document.getElementById('main-video-frame');
-    // بنخلي الرابط يسمح بالتكبير ويدي صلاحيات كاملة للإطار
-    frame.src = formatUrl(url).replace("controls=0", "controls=1"); 
-    document.getElementById('video-player-modal').style.display = 'flex'; 
+    frame.src = formatUrl(url).replace("controls=0", "controls=1");
+    document.getElementById('video-player-modal').style.display = 'block';
+    document.getElementById('video-title-display').innerText = title || '';
+
+    // صورة المستخدم في خانة التعليق
+    const user = auth.currentUser;
+    if (user) {
+        document.getElementById('comment-my-avatar').src = user.photoURL || '';
+    }
+
+    // تحميل التقييم والتعليقات
+    initModalStars(lessonId);
+    loadModalRating(lessonId);
+    listenComments(lessonId);
+
+    pushStateForVideo();
 }
 
-function closePlayer() { 
-    document.getElementById('main-video-frame').src = ""; 
-    document.getElementById('video-player-modal').style.display = 'none'; 
-
-    // لو الطالب خرج وما فكش قفل الشاشة، إحنا بنفكه هنا
-    if (screen.orientation && screen.orientation.unlock) {
-        screen.orientation.unlock();
-    }
+function closePlayer() {
+    document.getElementById('main-video-frame').src = "";
+    document.getElementById('video-player-modal').style.display = 'none';
+    document.getElementById('comment-input').value = '';
+    if (commentsUnsubscribe) { commentsUnsubscribe(); commentsUnsubscribe = null; }
+    if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock();
 }
 
 function filterVideos() {
@@ -693,16 +708,231 @@ window.addEventListener('touchmove', (e) => {
 }, {passive: true});
 
 window.addEventListener('touchend', () => {
+    // تم نقل التحديث لـ touchmove عشان يتشغل مرة واحدة بس
     if (indicator && parseInt(indicator.style.top) > 0) {
-        // تنفيذ التحديث بعد ثانية واحدة من رفع الصباع
-        setTimeout(() => {
-            location.reload(); // إعادة تحميل الصفحة
-        }, 1000);
+        indicator.style.top = '-50px'; // إخفاء المؤشر بعد التشغيل
     }
 });
 
 // مراقب التكبير: أول ما الشاشة تكبر (سواء بزرار درايف أو غيره) اقلب الموبايل
+// ============================================
+//  متغيرات الفيديو الحالي
+// ============================================
+let currentLessonId = null;
+let currentLessonTitle = null;
+let commentsUnsubscribe = null;
+
+// ============================================
+//  الاسم المعروض (مخصص أو من Google)
+// ============================================
+async function getMyDisplayName() {
+    const user = auth.currentUser;
+    if (!user) return '';
+    const doc = await db.collection('users_access').doc(user.email.toLowerCase()).get();
+    return doc.data()?.displayName || user.displayName || user.email.split('@')[0];
+}
+
+async function saveDisplayName() {
+    const input = document.getElementById('profile-display-name-input');
+    const newName = input.value.trim();
+    if (!newName) return showToast('اكتب اسم الأول!', 'warning');
+    const user = auth.currentUser;
+    if (!user) return;
+    await db.collection('users_access').doc(user.email.toLowerCase())
+        .set({ displayName: newName }, { merge: true });
+    document.getElementById('profile-name').innerText = newName;
+    showToast('تم حفظ الاسم ✅');
+}
+
+// ============================================
+//  ملف الطالب (Profile)
+// ============================================
+const gradeMap = {
+    '1-mid':'أولى إعدادي', '2-mid':'تانية إعدادي', '3-mid':'تالتة إعدادي',
+    '1-sec':'أولى ثانوي',  '2-sec':'تانية ثانوي',  '3-sec':'تالتة ثانوي'
+};
+
+async function openProfile() {
+    if (document.getElementById('drop-menu').style.display === 'flex') toggleMenu();
+    const user = auth.currentUser;
+    if (!user) return;
+
+    document.getElementById('profile-avatar').src = user.photoURL || '';
+    document.getElementById('profile-email').innerText = user.email || '';
+    document.getElementById('profile-grade-text').innerText = gradeMap[s_grade] || '-';
+
+    const userDoc = await db.collection('users_access').doc(user.email.toLowerCase()).get();
+    const data = userDoc.data() || {};
+    const role = data.role || 'student';
+    const customName = data.displayName || user.displayName || '';
+
+    document.getElementById('profile-name').innerText = customName;
+    document.getElementById('profile-display-name-input').value = customName;
+
+    const badge = document.getElementById('profile-role-badge');
+    if (role === 'master') {
+        badge.innerText = '👑 مشرف عام';
+        badge.style.cssText = 'background:linear-gradient(90deg,#ff4b1f,#ff9068);color:white;padding:3px 10px;border-radius:30px;';
+    } else if (role === 'teacher') {
+        badge.innerText = '🛡️ مدرس مساعد';
+        badge.style.cssText = 'background:rgba(234,179,8,0.15);color:#eab308;border:1px solid rgba(234,179,8,0.3);padding:3px 10px;border-radius:30px;';
+    } else {
+        badge.innerText = '🎓 طالب';
+        badge.style.cssText = 'background:rgba(59,130,246,0.15);color:#60a5fa;border:1px solid rgba(59,130,246,0.3);padding:3px 10px;border-radius:30px;';
+    }
+
+    const watchedDoc = await db.collection('watched').doc(user.email.toLowerCase()).get();
+    document.getElementById('profile-watched').innerText = (watchedDoc.data()?.lessons || []).length;
+
+    document.getElementById('profile-modal').style.display = 'flex';
+}
+
+function closeProfile() {
+    document.getElementById('profile-modal').style.display = 'none';
+}
+
+async function markWatched(lessonId) {
+    const user = auth.currentUser;
+    if (!user || !lessonId) return;
+    await db.collection('watched').doc(user.email.toLowerCase()).set({
+        lessons: firebase.firestore.FieldValue.arrayUnion(lessonId)
+    }, { merge: true }).catch(() => {});
+}
+
+// ============================================
+//  نظام التقييم في مودال الفيديو ⭐
+// ============================================
+function initModalStars(lessonId) {
+    const stars = document.querySelectorAll('.modal-star');
+    stars.forEach(star => {
+        star.onmouseover = () => {
+            const val = parseInt(star.getAttribute('data-val'));
+            stars.forEach(s => {
+                s.style.color = parseInt(s.getAttribute('data-val')) <= val ? '#edd3a1' : '#374151';
+                s.style.transform = parseInt(s.getAttribute('data-val')) <= val ? 'scale(1.2)' : 'scale(1)';
+            });
+        };
+        star.onmouseleave = () => loadModalRating(lessonId);
+        star.onclick = () => submitModalRating(lessonId, parseInt(star.getAttribute('data-val')));
+    });
+}
+
+async function loadModalRating(lessonId) {
+    const user = auth.currentUser;
+    if (!user) return;
+    const snap = await db.collection('ratings').doc(lessonId).get();
+    const ratings = snap.data()?.ratings || {};
+    const myRating = ratings[user.email.toLowerCase()] || 0;
+    const allVals = Object.values(ratings);
+    const avg = allVals.length ? (allVals.reduce((a, b) => a + b, 0) / allVals.length).toFixed(1) : 0;
+    const count = allVals.length;
+
+    document.getElementById('modal-avg-val').innerText = avg > 0 ? avg : '-';
+    document.getElementById('modal-raters-count').innerText = count;
+
+    const stars = document.querySelectorAll('.modal-star');
+    const compareVal = myRating > 0 ? myRating : Math.round(parseFloat(avg));
+    stars.forEach(s => {
+        const v = parseInt(s.getAttribute('data-val'));
+        s.style.color = v <= compareVal ? '#c5a059' : '#374151';
+        s.style.transform = 'scale(1)';
+    });
+}
+
+async function submitModalRating(lessonId, val) {
+    const user = auth.currentUser;
+    if (!user) return;
+    await db.collection('ratings').doc(lessonId).set({
+        ratings: { [user.email.toLowerCase()]: val }
+    }, { merge: true });
+    showToast(`قيّمت الدرس بـ ${val} نجوم ⭐`);
+    loadModalRating(lessonId);
+}
+
+// ============================================
+//  نظام التعليقات 💬
+// ============================================
+function listenComments(lessonId) {
+    if (commentsUnsubscribe) commentsUnsubscribe();
+    const list = document.getElementById('comments-list');
+    const countEl = document.getElementById('comments-count');
+
+    commentsUnsubscribe = db.collection('comments').doc(lessonId)
+        .collection('messages')
+        .orderBy('createdAt', 'asc')
+        .onSnapshot(snap => {
+            if (snap.empty) {
+                list.innerHTML = `<div style="text-align:center;padding:22px;color:rgba(255,255,255,0.25);font-family:'Cairo',sans-serif;font-size:12px;">
+                    <i class="fas fa-comment-slash" style="font-size:22px;margin-bottom:6px;display:block;"></i>
+                    لا توجد تعليقات بعد، كن أول من يعلّق!
+                </div>`;
+                countEl.innerText = '0';
+                return;
+            }
+
+            countEl.innerText = snap.size;
+            let html = '';
+            snap.forEach(doc => {
+                const d = doc.data();
+                const timeAgo = d.createdAt ? formatTimeAgo(d.createdAt.toDate()) : '';
+                const isMe = auth.currentUser && d.email === auth.currentUser.email.toLowerCase();
+                html += `
+                <div style="display:flex;gap:9px;padding:10px 14px;${isMe ? 'background:rgba(197,160,89,0.04);' : ''}border-bottom:1px solid rgba(255,255,255,0.04);">
+                    <img src="${d.avatar || ''}" referrerpolicy="no-referrer"
+                         style="width:30px;height:30px;border-radius:9px;object-fit:cover;flex-shrink:0;border:1px solid rgba(255,255,255,0.1);"
+                         onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(d.displayName)}&background=111827&color=c5a059&size=60'">
+                    <div style="flex:1;">
+                        <div style="display:flex;align-items:center;gap:7px;margin-bottom:3px;">
+                            <span style="color:${isMe ? '#c5a059' : 'white'};font-family:'Cairo',sans-serif;font-weight:900;font-size:12px;">${d.displayName}</span>
+                            ${isMe ? '<span style="background:rgba(197,160,89,0.15);color:#c5a059;font-size:9px;padding:1px 6px;border-radius:20px;font-family:Cairo,sans-serif;">أنت</span>' : ''}
+                            <span style="color:rgba(255,255,255,0.25);font-size:10px;font-family:Cairo,sans-serif;margin-right:auto;">${timeAgo}</span>
+                        </div>
+                        <p style="color:rgba(255,255,255,0.8);font-family:'Cairo',sans-serif;font-size:12px;margin:0;line-height:1.5;">${d.text}</p>
+                    </div>
+                    ${isMe ? `<button onclick="deleteComment('${lessonId}','${doc.id}')" style="background:none;border:none;color:rgba(239,68,68,0.5);cursor:pointer;font-size:12px;padding:0 4px;" title="حذف">
+                        <i class="fas fa-trash-alt"></i></button>` : ''}
+                </div>`;
+            });
+            list.innerHTML = html;
+            list.scrollTop = list.scrollHeight;
+        });
+}
+
+async function submitComment() {
+    const input = document.getElementById('comment-input');
+    const text = input.value.trim();
+    if (!text) return;
+    const user = auth.currentUser;
+    if (!user || !currentLessonId) return;
+
+    const displayName = await getMyDisplayName();
+    input.value = '';
+
+    await db.collection('comments').doc(currentLessonId)
+        .collection('messages').add({
+            text,
+            displayName,
+            email: user.email.toLowerCase(),
+            avatar: user.photoURL || '',
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+}
+
+async function deleteComment(lessonId, commentId) {
+    await db.collection('comments').doc(lessonId)
+        .collection('messages').doc(commentId).delete();
+}
+
+function formatTimeAgo(date) {
+    const diff = Math.floor((Date.now() - date.getTime()) / 1000);
+    if (diff < 60) return 'الآن';
+    if (diff < 3600) return `منذ ${Math.floor(diff/60)} دقيقة`;
+    if (diff < 86400) return `منذ ${Math.floor(diff/3600)} ساعة`;
+    return `منذ ${Math.floor(diff/86400)} يوم`;
+}
+
 document.addEventListener('fullscreenchange', () => {
+
     if (document.fullscreenElement) {
         // الطالب داس تكبير -> اقلب عرض
         if (screen.orientation && screen.orientation.lock) {

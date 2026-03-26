@@ -283,6 +283,7 @@ body {
     margin: 0;
     display: -webkit-box;
     -webkit-line-clamp: 2; 
+    line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden; 
     text-overflow: ellipsis;
@@ -540,10 +541,26 @@ body {
 }
 
 @keyframes pulse-red {
-    0% { transform: scale(1); opaci  http://localhost:3000 ty: 1; }
+    0% { transform: scale(1); opacity: 1; }
     50% { transform: scale(1.05); opacity: 0.9; }
     100% { transform: scale(1); opacity: 1; }
 }
+
+/* تقييم النجوم */
+.star-rating {
+    display: flex;
+    justify-content: center;
+    gap: 3px;
+    padding: 4px 0;
+}
+.star-btn {
+    font-size: 13px;
+    color: #374151;
+    cursor: pointer;
+    transition: color 0.2s, transform 0.1s;
+}
+.star-btn:hover { transform: scale(1.2); }
+@media (max-width: 480px) { .star-btn { font-size: 11px; } }
 
 /* تعديل الزراير */
 @keyframes modalEntry {

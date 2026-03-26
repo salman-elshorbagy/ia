@@ -1,0 +1,15 @@
+{
+  "name": "أكاديمية الشربيني للكيمياء",
+  "short_name": "الشربيني",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#080c14",
+  "theme_color": "#c5a059",
+  "icons": [
+    {
+      "src": "logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
