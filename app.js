@@ -1,6 +1,7 @@
 let s_grade = localStorage.getItem('s_grade');
 let editingId = null;
 let unsubscribe = null;
+let currentUserRole = 'student'; // متغير عالمي للرتبة
 // إدارة حالة تسجيل الدخول - النسخة المعتمدة على الرتب
 auth.onAuthStateChanged(async (user) => {
     if (user) {
@@ -35,6 +36,7 @@ auth.onAuthStateChanged(async (user) => {
 
             const userData = userDoc.data();
             const userRole = userData.role;
+            currentUserRole = userRole; // حفظ الرتبة عالمياً
             // جلب الصف من الداتابيز لو ملوش صف في الـ localStorage
             const savedGrade = userData.lastGrade; 
 
@@ -194,12 +196,13 @@ function loadLessons(grade) {
 
             clone.querySelector('.lesson-name').innerText = item.title;
 
-            // تحميل التقييم
-            const starsContainer = clone.querySelector('.star-rating');
-            if (starsContainer) {
-                starsContainer.setAttribute('data-lesson-id', lessonId);
-                // نحمل التقييم بعد ما الكارت يتضاف في الـ DOM
-                setTimeout(() => loadRating(lessonId, starsContainer), 100);
+            // تحميل عدد المقيمين فقط
+            const ratersEl = clone.querySelector('.raters-count');
+            if (ratersEl) {
+                db.collection('ratings').doc(lessonId).get().then(snap => {
+                    const count = Object.keys(snap.data()?.ratings || {}).length;
+                    ratersEl.innerText = count > 0 ? `${count} قيّم` : 'لم يُقيَّم بعد';
+                }).catch(() => {});
             }
 
             const card = clone.querySelector('.lesson-card');
@@ -527,17 +530,25 @@ function playVideo(url, lessonId, title) {
     document.getElementById('video-player-modal').style.display = 'block';
     document.getElementById('video-title-display').innerText = title || '';
 
+    // إعادة ضبط لوحة التفاصيل
+    const ratingsPanel = document.getElementById('ratings-panel');
+    if (ratingsPanel) ratingsPanel.style.display = 'none';
+    const ratingsBtn = document.getElementById('ratings-toggle-btn');
+    if (ratingsBtn) ratingsBtn.style.background = 'rgba(197,160,89,0.1)';
+
+    // سكرول لأعلى المودال
+    document.getElementById('video-player-modal').scrollTop = 0;
+
     // صورة المستخدم في خانة التعليق
     const user = auth.currentUser;
     if (user) {
-        document.getElementById('comment-my-avatar').src = user.photoURL || '';
+        const avatarEl = document.getElementById('comment-my-avatar');
+        if (avatarEl) avatarEl.src = user.photoURL || '';
     }
 
-    // تحميل التقييم والتعليقات
     initModalStars(lessonId);
     loadModalRating(lessonId);
     listenComments(lessonId);
-
     pushStateForVideo();
 }
 
@@ -545,6 +556,10 @@ function closePlayer() {
     document.getElementById('main-video-frame').src = "";
     document.getElementById('video-player-modal').style.display = 'none';
     document.getElementById('comment-input').value = '';
+    cancelReply();
+    // إزالة زرار التقييم عند الإغلاق
+    const removeBtn = document.getElementById('remove-rating-btn');
+    if (removeBtn) removeBtn.remove();
     if (commentsUnsubscribe) { commentsUnsubscribe(); commentsUnsubscribe = null; }
     if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock();
 }
@@ -611,30 +626,21 @@ function switchTab(tabName) {
 
 // حط دي في آخر ملف app.js
 function showToast(msg, icon = 'success') {
-    // بنحدد هنا لو لوحة الإدارة مفتوحة يرمي الرسالة جواها، لو مقفولة يرميها في الصفحة العادية
-    const targetElement = document.getElementById('admin-modal').style.display === 'flex' 
-                         ? document.getElementById('admin-modal') 
-                         : document.body;
-
     const Toast = Swal.mixin({
         toast: true,
-        position: 'top', 
-        target: targetElement, // السطر ده هو اللي هيخليها تظهر قدام عينك دايما
+        position: 'top',
         showConfirmButton: false,
         timer: 2500,
         timerProgressBar: true,
         background: '#1f2937',
         color: '#ffffff',
+        customClass: { container: 'swal-top-always' },
         didOpen: (toast) => {
-            toast.addEventListener('mouseenter', Swal.stopTimer)
-            toast.addEventListener('mouseleave', Swal.resumeTimer)
+            toast.addEventListener('mouseenter', Swal.stopTimer);
+            toast.addEventListener('mouseleave', Swal.resumeTimer);
         }
     });
-
-    Toast.fire({
-        icon: icon,
-        title: msg
-    });
+    Toast.fire({ icon, title: msg });
 }
 
 // حماية التطبيق من الإغلاق عند الضغط على زر الرجوع أثناء مشاهدة فيديو
@@ -674,44 +680,6 @@ window.addEventListener('offline', () => {
         confirmButtonText: 'حسناً',
         confirmButtonColor: '#c5a059'
     });
-});
-
-// --- ميزة التحديث بالسحب (Pull to Refresh) ---
-
-let touchStart = 0;
-const indicator = document.getElementById('refresh-indicator');
-
-window.addEventListener('touchstart', (e) => {
-    // تسجيل نقطة بداية اللمس
-    touchStart = e.touches[0].pageY;
-}, {passive: true});
-
-window.addEventListener('touchmove', (e) => {
-    const touchMove = e.touches[0].pageY;
-    const distance = touchMove - touchStart;
-
-    // الشرط الذهبي:
-    // 1. لازم نكون في أول الصفحة (window.scrollY === 0)
-    // 2. لازم لوحة الإدارة تكون مقفولة (display !== 'flex') عشان ما تضايقكش وأنت بتمسح
-    // 3. لازم السحبة تكون طويلة كفاية (distance > 150)
-    
-    const isAdminOpen = document.getElementById('admin-modal').style.display === 'flex';
-
-    if (!isAdminOpen && window.scrollY === 0 && distance > 150) {
-        if (indicator) {
-            indicator.style.top = '20px'; 
-            setTimeout(() => {
-                location.reload();
-            }, 800);
-        }
-    }
-}, {passive: true});
-
-window.addEventListener('touchend', () => {
-    // تم نقل التحديث لـ touchmove عشان يتشغل مرة واحدة بس
-    if (indicator && parseInt(indicator.style.top) > 0) {
-        indicator.style.top = '-50px'; // إخفاء المؤشر بعد التشغيل
-    }
 });
 
 // مراقب التكبير: أول ما الشاشة تكبر (سواء بزرار درايف أو غيره) اقلب الموبايل
@@ -817,6 +785,68 @@ function initModalStars(lessonId) {
     });
 }
 
+function toggleRatingsPanel() {
+    const panel = document.getElementById('ratings-panel');
+    const btn = document.getElementById('ratings-toggle-btn');
+    if (panel.style.display === 'none') {
+        panel.style.display = 'block';
+        btn.style.background = 'rgba(197,160,89,0.25)';
+        loadRatingsDetails(currentLessonId);
+    } else {
+        panel.style.display = 'none';
+        btn.style.background = 'rgba(197,160,89,0.1)';
+    }
+}
+
+async function loadRatingsDetails(lessonId) {
+    const container = document.getElementById('ratings-details-list');
+    container.innerHTML = '<div style="text-align:center;padding:16px;color:rgba(255,255,255,0.3);font-family:Cairo,sans-serif;font-size:12px;">جاري التحميل...</div>';
+
+    const snap = await db.collection('ratings').doc(lessonId).get();
+    const data = snap.data() || {};
+    const ratings = data.ratings || {};
+    const ratingUsers = data.ratingUsers || {};
+    const entries = Object.entries(ratings);
+
+    if (!entries.length) {
+        container.innerHTML = '<div style="text-align:center;padding:20px;color:rgba(255,255,255,0.2);font-family:Cairo,sans-serif;font-size:12px;">لا توجد تقييمات بعد</div>';
+        return;
+    }
+
+    let html = '';
+    for (const [email, rating] of entries) {
+        // نجيب البيانات من ratingUsers الأول، لو مش موجودة نجيبها من users_access
+        let name = ratingUsers[email]?.name;
+        let avatarUrl = ratingUsers[email]?.avatar || '';
+
+        if (!name) {
+            const userDoc = await db.collection('users_access').doc(email).get();
+            name = userDoc.data()?.displayName || email.split('@')[0];
+        }
+
+        const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=1e293b&color=c5a059&size=60&bold=true`;
+        const stars = Array.from({length: 5}, (_, i) =>
+            `<i class="fas fa-star" style="font-size:12px; color:${i < rating ? '#c5a059' : '#374151'};"></i>`
+        ).join('');
+
+        html += `
+        <div style="display:flex; align-items:center; gap:12px; padding:10px 14px; border-bottom:1px solid rgba(255,255,255,0.04);">
+            <img src="${avatarUrl}" referrerpolicy="no-referrer"
+                 style="width:36px; height:36px; border-radius:10px; object-fit:cover; flex-shrink:0; border:1px solid rgba(197,160,89,0.2);"
+                 onerror="this.src='${fallbackAvatar}'">
+            <div style="flex:1;">
+                <p style="margin:0 0 3px; color:white; font-family:'Cairo',sans-serif; font-size:12px; font-weight:700;">${name}</p>
+                <div style="display:flex; gap:2px;">${stars}</div>
+            </div>
+            <div style="text-align:center;">
+                <span style="color:#c5a059; font-family:'Cairo',sans-serif; font-weight:900; font-size:16px;">${rating}</span>
+                <span style="color:rgba(255,255,255,0.25); font-size:10px;">/5</span>
+            </div>
+        </div>`;
+    }
+    container.innerHTML = html;
+}
+
 async function loadModalRating(lessonId) {
     const user = auth.currentUser;
     if (!user) return;
@@ -830,6 +860,21 @@ async function loadModalRating(lessonId) {
     document.getElementById('modal-avg-val').innerText = avg > 0 ? avg : '-';
     document.getElementById('modal-raters-count').innerText = count;
 
+    // لو قيّمت من قبل ورّي زرار "إزالة التقييم"
+    let removeBtn = document.getElementById('remove-rating-btn');
+    if (myRating > 0) {
+        if (!removeBtn) {
+            removeBtn = document.createElement('button');
+            removeBtn.id = 'remove-rating-btn';
+            removeBtn.onclick = () => removeMyRating(lessonId);
+            removeBtn.style.cssText = 'background:none;border:1px solid rgba(239,68,68,0.3);color:rgba(239,68,68,0.6);border-radius:20px;padding:4px 10px;font-family:Cairo,sans-serif;font-size:10px;font-weight:700;cursor:pointer;margin-top:4px;display:flex;align-items:center;gap:4px;';
+            removeBtn.innerHTML = '<i class="fas fa-times"></i> إزالة تقييمي';
+            document.getElementById('modal-stars').parentElement.appendChild(removeBtn);
+        }
+    } else {
+        if (removeBtn) removeBtn.remove();
+    }
+
     const stars = document.querySelectorAll('.modal-star');
     const compareVal = myRating > 0 ? myRating : Math.round(parseFloat(avg));
     stars.forEach(s => {
@@ -839,19 +884,50 @@ async function loadModalRating(lessonId) {
     });
 }
 
+async function removeMyRating(lessonId) {
+    const user = auth.currentUser;
+    if (!user) return;
+    const email = user.email.toLowerCase();
+    await db.collection('ratings').doc(lessonId).set({
+        ratings: { [email]: firebase.firestore.FieldValue.delete() },
+        ratingUsers: { [email]: firebase.firestore.FieldValue.delete() }
+    }, { merge: true });
+    showToast('تم إزالة تقييمك ✅');
+    loadModalRating(lessonId);
+    if (document.getElementById('ratings-panel')?.style.display !== 'none') {
+        loadRatingsDetails(lessonId);
+    }
+}
+
 async function submitModalRating(lessonId, val) {
     const user = auth.currentUser;
     if (!user) return;
+    const displayName = await getMyDisplayName();
+    const email = user.email.toLowerCase();
+
+    // نحفظ الرقم في ratings وبيانات المستخدم في ratingUsers
     await db.collection('ratings').doc(lessonId).set({
-        ratings: { [user.email.toLowerCase()]: val }
+        ratings: { [email]: val },
+        ratingUsers: {
+            [email]: {
+                name: displayName,
+                avatar: user.photoURL || ''
+            }
+        }
     }, { merge: true });
+
     showToast(`قيّمت الدرس بـ ${val} نجوم ⭐`);
     loadModalRating(lessonId);
+    if (document.getElementById('ratings-panel')?.style.display !== 'none') {
+        loadRatingsDetails(lessonId);
+    }
 }
 
 // ============================================
-//  نظام التعليقات 💬
+//  نظام التعليقات والردود 💬
 // ============================================
+let replyingTo = null; // { commentId, displayName }
+
 function listenComments(lessonId) {
     if (commentsUnsubscribe) commentsUnsubscribe();
     const list = document.getElementById('comments-list');
@@ -860,10 +936,10 @@ function listenComments(lessonId) {
     commentsUnsubscribe = db.collection('comments').doc(lessonId)
         .collection('messages')
         .orderBy('createdAt', 'asc')
-        .onSnapshot(snap => {
+        .onSnapshot(async snap => {
             if (snap.empty) {
-                list.innerHTML = `<div style="text-align:center;padding:22px;color:rgba(255,255,255,0.25);font-family:'Cairo',sans-serif;font-size:12px;">
-                    <i class="fas fa-comment-slash" style="font-size:22px;margin-bottom:6px;display:block;"></i>
+                list.innerHTML = `<div style="text-align:center;padding:24px;color:rgba(255,255,255,0.2);font-family:'Cairo',sans-serif;font-size:12px;">
+                    <i class="fas fa-comment-dots" style="font-size:24px;margin-bottom:8px;display:block;opacity:0.4;"></i>
                     لا توجد تعليقات بعد، كن أول من يعلّق!
                 </div>`;
                 countEl.innerText = '0';
@@ -871,31 +947,101 @@ function listenComments(lessonId) {
             }
 
             countEl.innerText = snap.size;
+            const isMaster = currentUserRole === 'master';
+            const myEmail = auth.currentUser?.email?.toLowerCase() || '';
+
+            // جمع كل التعليقات ثم نحمل ردودها
+            let totalCount = snap.size;
             let html = '';
-            snap.forEach(doc => {
+
+            for (const doc of snap.docs) {
                 const d = doc.data();
                 const timeAgo = d.createdAt ? formatTimeAgo(d.createdAt.toDate()) : '';
-                const isMe = auth.currentUser && d.email === auth.currentUser.email.toLowerCase();
-                html += `
-                <div style="display:flex;gap:9px;padding:10px 14px;${isMe ? 'background:rgba(197,160,89,0.04);' : ''}border-bottom:1px solid rgba(255,255,255,0.04);">
-                    <img src="${d.avatar || ''}" referrerpolicy="no-referrer"
-                         style="width:30px;height:30px;border-radius:9px;object-fit:cover;flex-shrink:0;border:1px solid rgba(255,255,255,0.1);"
-                         onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(d.displayName)}&background=111827&color=c5a059&size=60'">
-                    <div style="flex:1;">
-                        <div style="display:flex;align-items:center;gap:7px;margin-bottom:3px;">
-                            <span style="color:${isMe ? '#c5a059' : 'white'};font-family:'Cairo',sans-serif;font-weight:900;font-size:12px;">${d.displayName}</span>
-                            ${isMe ? '<span style="background:rgba(197,160,89,0.15);color:#c5a059;font-size:9px;padding:1px 6px;border-radius:20px;font-family:Cairo,sans-serif;">أنت</span>' : ''}
-                            <span style="color:rgba(255,255,255,0.25);font-size:10px;font-family:Cairo,sans-serif;margin-right:auto;">${timeAgo}</span>
+                const isMe = d.email === myEmail;
+                const canDelete = isMe || isMaster;
+                const nameClickable = isMaster ? `onclick="viewUserProfile('${d.email}','${d.displayName?.replace(/'/g,"\\'")}','${d.avatar || ''}')" style="cursor:pointer;"` : '';
+                const masterBadge = isMaster && !isMe ? `<span style="background:rgba(239,68,68,0.1);color:#ef4444;font-size:9px;padding:1px 5px;border-radius:10px;font-family:Cairo,sans-serif;margin-right:2px;" title="${d.email}">👁</span>` : '';
+
+                // تحميل الردود
+                const repliesSnap = await db.collection('comments').doc(lessonId)
+                    .collection('messages').doc(doc.id)
+                    .collection('replies').orderBy('createdAt','asc').get();
+                totalCount += repliesSnap.size;
+
+                let repliesHtml = '';
+                repliesSnap.forEach(rDoc => {
+                    const r = rDoc.data();
+                    const rTime = r.createdAt ? formatTimeAgo(r.createdAt.toDate()) : '';
+                    const rIsMe = r.email === myEmail;
+                    const rCanDelete = rIsMe || isMaster;
+                    const rNameClick = isMaster ? `onclick="viewUserProfile('${r.email}','${r.displayName?.replace(/'/g,"\\'")}','${r.avatar || ''}')" style="cursor:pointer;"` : '';
+
+                    repliesHtml += `
+                    <div style="display:flex;gap:8px;padding:8px 12px 8px 0;border-top:1px solid rgba(255,255,255,0.04);margin-top:4px;">
+                        <div style="width:2px;background:rgba(197,160,89,0.3);border-radius:2px;flex-shrink:0;margin-right:4px;"></div>
+                        <img src="${r.avatar||''}" referrerpolicy="no-referrer"
+                             style="width:26px;height:26px;border-radius:8px;object-fit:cover;flex-shrink:0;border:1px solid rgba(255,255,255,0.08);"
+                             onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(r.displayName||'U')}&background=1e293b&color=c5a059&size=50'">
+                        <div style="flex:1;">
+                            <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;flex-wrap:wrap;">
+                                <span ${rNameClick} style="color:${rIsMe?'#c5a059':'rgba(255,255,255,0.9)'};font-family:'Cairo',sans-serif;font-weight:900;font-size:11px;">${r.displayName||'مجهول'}</span>
+                                ${rIsMe ? '<span style="background:rgba(197,160,89,0.15);color:#c5a059;font-size:9px;padding:1px 5px;border-radius:10px;font-family:Cairo,sans-serif;">أنت</span>' : ''}
+                                <span style="color:rgba(255,255,255,0.2);font-size:9px;font-family:Cairo,sans-serif;margin-right:auto;">${rTime}</span>
+                            </div>
+                            <p style="color:rgba(255,255,255,0.75);font-family:'Cairo',sans-serif;font-size:11px;margin:0;line-height:1.5;">${r.text}</p>
                         </div>
-                        <p style="color:rgba(255,255,255,0.8);font-family:'Cairo',sans-serif;font-size:12px;margin:0;line-height:1.5;">${d.text}</p>
+                        ${rCanDelete ? `<button onclick="deleteReply('${lessonId}','${doc.id}','${rDoc.id}')" style="background:none;border:none;color:rgba(239,68,68,0.4);cursor:pointer;font-size:11px;padding:0 2px;flex-shrink:0;" title="حذف"><i class="fas fa-trash-alt"></i></button>` : ''}
+                    </div>`;
+                });
+
+                html += `
+                <div style="border-bottom:1px solid rgba(255,255,255,0.05);">
+                    <div style="display:flex;gap:10px;padding:12px 14px;${isMe?'background:rgba(197,160,89,0.03);':''}">
+                        <img src="${d.avatar||''}" referrerpolicy="no-referrer"
+                             style="width:32px;height:32px;border-radius:10px;object-fit:cover;flex-shrink:0;border:1px solid rgba(255,255,255,0.1);margin-top:1px;"
+                             onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(d.displayName||'U')}&background=1e293b&color=c5a059&size=60'">
+                        <div style="flex:1;min-width:0;">
+                            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap;">
+                                <span ${nameClickable} style="color:${isMe?'#c5a059':'white'};font-family:'Cairo',sans-serif;font-weight:900;font-size:12px;">${d.displayName||'مجهول'}</span>
+                                ${isMe ? '<span style="background:rgba(197,160,89,0.15);color:#c5a059;font-size:9px;padding:1px 6px;border-radius:20px;font-family:Cairo,sans-serif;">أنت</span>' : ''}
+                                ${masterBadge}
+                                <span style="color:rgba(255,255,255,0.2);font-size:10px;font-family:Cairo,sans-serif;margin-right:auto;">${timeAgo}</span>
+                            </div>
+                            <p style="color:rgba(255,255,255,0.82);font-family:'Cairo',sans-serif;font-size:12px;margin:0 0 8px;line-height:1.6;">${d.text}</p>
+                            <button onclick="startReply('${doc.id}','${d.displayName?.replace(/'/g,"\\'")||''}')"
+                                style="background:none;border:none;color:rgba(197,160,89,0.6);font-family:'Cairo',sans-serif;font-size:11px;font-weight:700;cursor:pointer;padding:0;display:flex;align-items:center;gap:4px;">
+                                <i class="fas fa-reply" style="font-size:10px;"></i> رد
+                            </button>
+                            ${repliesHtml ? `<div style="margin-top:6px;">${repliesHtml}</div>` : ''}
+                        </div>
+                        ${canDelete ? `<button onclick="deleteComment('${lessonId}','${doc.id}')" style="background:none;border:none;color:rgba(239,68,68,0.4);cursor:pointer;font-size:12px;padding:0 2px;flex-shrink:0;" title="حذف"><i class="fas fa-trash-alt"></i></button>` : ''}
                     </div>
-                    ${isMe ? `<button onclick="deleteComment('${lessonId}','${doc.id}')" style="background:none;border:none;color:rgba(239,68,68,0.5);cursor:pointer;font-size:12px;padding:0 4px;" title="حذف">
-                        <i class="fas fa-trash-alt"></i></button>` : ''}
                 </div>`;
-            });
+            }
+
+            countEl.innerText = totalCount;
             list.innerHTML = html;
-            list.scrollTop = list.scrollHeight;
         });
+}
+
+function startReply(commentId, displayName) {
+    replyingTo = { commentId, displayName };
+    const input = document.getElementById('comment-input');
+    input.placeholder = `ردك على ${displayName}...`;
+    input.focus();
+    // ضيف مؤشر الرد
+    const indicator = document.getElementById('reply-indicator');
+    if (indicator) {
+        indicator.style.display = 'flex';
+        indicator.querySelector('#reply-to-name').innerText = displayName;
+    }
+}
+
+function cancelReply() {
+    replyingTo = null;
+    document.getElementById('comment-input').placeholder = 'شاركنا رأيك في الدرس...';
+    const indicator = document.getElementById('reply-indicator');
+    if (indicator) indicator.style.display = 'none';
 }
 
 async function submitComment() {
@@ -908,19 +1054,91 @@ async function submitComment() {
     const displayName = await getMyDisplayName();
     input.value = '';
 
-    await db.collection('comments').doc(currentLessonId)
-        .collection('messages').add({
-            text,
-            displayName,
-            email: user.email.toLowerCase(),
-            avatar: user.photoURL || '',
-            createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
+    if (replyingTo) {
+        // رد على تعليق
+        await db.collection('comments').doc(currentLessonId)
+            .collection('messages').doc(replyingTo.commentId)
+            .collection('replies').add({
+                text,
+                displayName,
+                email: user.email.toLowerCase(),
+                avatar: user.photoURL || '',
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        cancelReply();
+    } else {
+        // تعليق جديد
+        await db.collection('comments').doc(currentLessonId)
+            .collection('messages').add({
+                text,
+                displayName,
+                email: user.email.toLowerCase(),
+                avatar: user.photoURL || '',
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+    }
 }
 
 async function deleteComment(lessonId, commentId) {
+    // حذف الردود أولاً ثم التعليق
+    const repliesSnap = await db.collection('comments').doc(lessonId)
+        .collection('messages').doc(commentId).collection('replies').get();
+    const batch = db.batch();
+    repliesSnap.forEach(d => batch.delete(d.ref));
+    batch.delete(db.collection('comments').doc(lessonId).collection('messages').doc(commentId));
+    await batch.commit();
+}
+
+async function deleteReply(lessonId, commentId, replyId) {
     await db.collection('comments').doc(lessonId)
-        .collection('messages').doc(commentId).delete();
+        .collection('messages').doc(commentId)
+        .collection('replies').doc(replyId).delete();
+}
+
+// ============================================
+//  بروفايل المستخدم للمشرف العام 👑
+// ============================================
+async function viewUserProfile(email, displayName, avatar) {
+    if (currentUserRole !== 'master') return;
+
+    const userDoc = await db.collection('users_access').doc(email.toLowerCase()).get();
+    const data = userDoc.data() || {};
+    const role = data.role || 'student';
+    const name = data.displayName || displayName || email.split('@')[0];
+    const roleLabels = { master:'👑 مشرف عام', teacher:'🛡️ مدرس مساعد', student:'🎓 طالب' };
+    const watchedDoc = await db.collection('watched').doc(email.toLowerCase()).get();
+    const watchedCount = (watchedDoc.data()?.lessons || []).length;
+    const grade = gradeMap[data.lastGrade] || '-';
+    const avatarUrl = avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=1e293b&color=c5a059&size=100&bold=true`;
+
+    await Swal.fire({
+        html: `
+        <div style="font-family:'Cairo',sans-serif;direction:rtl;text-align:right;">
+            <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;">
+                <img src="${avatarUrl}" referrerpolicy="no-referrer" style="width:60px;height:60px;border-radius:14px;border:2px solid #c5a059;object-fit:cover;" onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=1e293b&color=c5a059&size=100'">
+                <div>
+                    <p style="margin:0;color:white;font-weight:900;font-size:15px;">${name}</p>
+                    <p style="margin:3px 0 0;color:rgba(255,255,255,0.4);font-size:11px;">${email}</p>
+                    <span style="font-size:11px;color:#c5a059;font-weight:700;">${roleLabels[role]||role}</span>
+                </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                <div style="background:rgba(255,255,255,0.05);border-radius:12px;padding:12px;text-align:center;">
+                    <p style="color:#c5a059;font-size:20px;font-weight:900;margin:0;">${watchedCount}</p>
+                    <p style="color:rgba(255,255,255,0.4);font-size:11px;margin:4px 0 0;">درس شاهده</p>
+                </div>
+                <div style="background:rgba(255,255,255,0.05);border-radius:12px;padding:12px;text-align:center;">
+                    <p style="color:#c5a059;font-size:13px;font-weight:900;margin:0;">${grade}</p>
+                    <p style="color:rgba(255,255,255,0.4);font-size:11px;margin:4px 0 0;">الصف الدراسي</p>
+                </div>
+            </div>
+        </div>`,
+        background: '#111827',
+        color: '#fff',
+        showConfirmButton: false,
+        showCloseButton: true,
+        heightAuto: false,
+    });
 }
 
 function formatTimeAgo(date) {
