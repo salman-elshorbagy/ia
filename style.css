@@ -1,232 +1,218 @@
 @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
 
-:root { 
-    --gold: #c5a059; 
-    --dark: #080c14; 
-    --panel: #111827; 
+:root {
+    --gold: #c5a059;
+    --dark: #080c14;
+    --panel: #111827;
 }
 
-body { 
-    font-family: 'Cairo', sans-serif; 
-    background: var(--dark); 
-    color: white; 
-    min-height: 100vh; 
-    overflow-x: hidden; 
-        -webkit-tap-highlight-color: transparent;
+body {
+    font-family: 'Cairo', sans-serif;
+    background: var(--dark);
+    color: white;
+    min-height: 100vh;
+    overflow-x: hidden;
+    -webkit-tap-highlight-color: transparent;
     user-select: none;
     -webkit-user-select: none;
-        overscroll-behavior-y: contain;
+    overscroll-behavior-y: contain;
 }
 
-#refresh-indicator {
-    position: fixed;
-    top: -50px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: #c5a059;
-    color: black;
-    padding: 10px 20px;
-    border-radius: 30px;
-    font-size: 12px;
-    font-weight: bold;
-    z-index: 99999;
-    transition: top 0.3s ease;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-}
-
-/* ضبط ارتفاع الهيدر في الموبايل */
+/* =========================================
+   الهيدر
+   ========================================= */
 #app-header {
-    padding: 10px 15px !important; 
+    height: 60px !important;
+    padding: 10px 15px !important;
 }
 
-/* تصغير صورة المستخدم في الموبايل */
-@media (max-width: 480px) {
-    #user-avatar {
-        width: 35px !important;
-        height: 35px !important;
-        border-radius: 10px !important;
-    }
-    #user-first-name {
-        font-size: 12px !important;
-    }
-    #app-content {
-        padding-top: 20px !important;
-        padding-left: 15px !important;
-        padding-right: 15px !important;
-    }
-}
-
-/* القائمة المنسدلة */
+/* =========================================
+   القائمة المنسدلة
+   ========================================= */
 #drop-menu {
     position: absolute;
     top: 100%;
     right: 0;
-    width: 200px;
+    width: 185px;
     background: #1e293b;
     border: 1px solid rgba(197, 160, 89, 0.3);
     border-radius: 15px;
     display: none;
     flex-direction: column;
     overflow: hidden;
-    box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.6);
     z-index: 2000;
     margin-top: 10px;
 }
 
 #drop-menu button {
     padding: 12px 15px !important;
-    font-size: 13px !important;
+    font-size: 12px !important;
 }
 
-/* لوحة الإدارة */
-#admin-modal { 
-    display: none; 
-    position: fixed; 
-    inset: 0; 
-    background: rgba(0,0,0,0.98); 
-    z-index: 10000; 
-    padding: 20px; 
-    overflow-y: auto; 
-    align-items: center; /* لتوسيط اللوحة في الشاشة */
+/* =========================================
+   لوحة الإدارة
+   ========================================= */
+#admin-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.98);
+    z-index: 10000;
+    padding: 16px;
+    overflow-y: auto;
+    align-items: flex-start;
     justify-content: center;
 }
 
 .admin-box {
     background: var(--panel);
     border: 2px solid var(--gold);
-    width: 100%; 
+    width: 100%;
     max-width: 700px;
-    border-radius: 25px; 
-    padding: 20px; 
+    border-radius: 25px;
+    padding: 24px;
     margin: auto;
-    max-height: 90vh; 
-    overflow-y: auto; 
+    max-height: none;
+    animation: modalEntry 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-.admin-box input, .admin-box select {
-    padding: 12px !important;
-    font-size: 14px !important;
-    border-radius: 12px !important;
+.admin-box input,
+.admin-box select {
+    font-family: 'Cairo', sans-serif;
+    color: white;
+    font-size: 13px !important;
 }
 
-#admin-lessons-list .flex {
-    flex-direction: column; 
-    gap: 10px;
-    align-items: flex-start;
+.delete-section {
+    background: rgba(239, 68, 68, 0.05);
+    border: 2px dashed rgba(239, 68, 68, 0.2);
+    border-radius: 20px;
+    padding: 20px;
+    margin-top: 20px;
 }
 
-@media (min-width: 768px) {
-    #admin-lessons-list .flex {
-        flex-direction: row; 
-        align-items: center;
-        justify-content: space-between;
+/* =========================================
+   شعار تبويب لوحة التحكم
+   ========================================= */
+.tab-btn { transition: all 0.3s ease; color: rgba(255,255,255,0.5); }
+.tab-btn.active {
+    background: #c5a059 !important;
+    color: black !important;
+    box-shadow: 0 0 15px rgba(197, 160, 89, 0.3);
+}
+
+/* =========================================
+   زرار الذهب العام
+   ========================================= */
+.btn-gold {
+    background: linear-gradient(135deg, #c5a059 0%, #edd3a1 100%);
+    color: #080c14;
+    font-weight: 900;
+    box-shadow: 0 8px 20px rgba(197, 160, 89, 0.2);
+    transition: transform 0.15s, box-shadow 0.15s;
+}
+.btn-gold:active { transform: scale(0.97); }
+
+/* =========================================
+   رسائل الحالة في الشبكة
+   ========================================= */
+.no-lessons-msg {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 60px 20px;
+    color: rgba(255,255,255,0.2);
+    font-family: 'Cairo', sans-serif;
+}
+.no-lessons-msg i {
+    font-size: 40px;
+    display: block;
+    margin-bottom: 12px;
+    opacity: 0.3;
+}
+.no-lessons-msg p { font-size: 14px; font-weight: 700; margin: 0; }
+
+.lessons-loading {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 40px;
+    color: rgba(255,255,255,0.2);
+    font-family: 'Cairo', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+/* =========================================
+   الشبكة العامة للدروس
+   ========================================= */
+#lesson-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+    gap: 16px;
+    padding: 0 0 20px;
+}
+
+@media (max-width: 480px) {
+    .cards-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+        padding-bottom: 12px;
     }
-    .admin-box {
-        padding: 40px;
-    }
 }
 
-.delete-section { 
-    background: rgba(239, 68, 68, 0.05); 
-    border: 2px dashed rgba(239, 68, 68, 0.2); 
-    border-radius: 30px; 
-    padding: 30px; 
-    margin-top: 40px; 
+/* =========================================
+   رأس القسم (فيديوهات / صور)
+   ========================================= */
+.section-header {
+    font-family: 'Cairo', sans-serif;
+    font-weight: 900;
+    font-size: 15px;
+    color: var(--gold);
+    padding: 8px 4px 12px 4px;
+    border-right: 4px solid var(--gold);
+    padding-right: 14px;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
-.delete-card { 
-    background: #1a1a1a; 
-    border-radius: 20px; 
-    padding: 20px; 
-    border-right: 6px solid #ef4444; 
-    transition: 0.3s; 
-    margin-bottom: 15px; 
+.section-header:not(:first-child) {
+    margin-top: 24px;
 }
 
-.delete-card:hover { 
-    transform: scale(1.01); 
-    background: #221111; 
-}
-
-.btn-gold { 
-    background: linear-gradient(135deg, #c5a059 0%, #edd3a1 100%); 
-    color: #080c14; 
-    font-weight: 900; 
-    box-shadow: 0 10px 20px rgba(197, 160, 89, 0.2); 
-}
-
-/* --- 1. الكارت الأساسي (تعديل بسيط) --- */
+/* =========================================
+   كارت الدرس
+   ========================================= */
 .lesson-card {
     background: #1a1f2e;
     border-radius: 12px;
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    height: 100%; /* عشان الكروت تبقى طول واحد */
+    height: 100%;
     border: 1px solid rgba(255,255,255,0.05);
+    transition: border-color 0.25s, transform 0.25s;
+    cursor: pointer;
+}
+.lesson-card:hover {
+    border-color: var(--gold);
+    transform: translateY(-4px);
 }
 
-.lesson-card:hover { 
-    border-color: var(--gold); 
-    transform: translateY(-5px); 
-}
-
-/* مشغل الفيديو */
-#video-player-modal { 
-    display: none; 
-    position: fixed; 
-    inset: 0; 
-    background: rgba(8, 12, 20, 0.98);
-    z-index: 20000; 
-    align-items: center; 
-    justify-content: center; 
-}
-
-.video-container { 
-    width: 95%; 
-    max-width: 1050px; 
-    aspect-ratio: 16 / 9;
-    background: black; 
-    border-radius: 20px; 
-    border: 2px solid var(--gold); 
-    overflow: hidden; 
-    position: relative; 
-    margin: auto;
-    box-shadow: 0 0 50px rgba(0,0,0,0.5);
-}
-
-#main-video-frame { 
-    width: 100%; 
-    height: 100%; 
-    border: none;
-}
-
-.grid-layout {
-    display: grid !important;
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)) !important;
-    gap: 20px !important; 
-    padding: 20px;
-}
-
-@media (max-width: 480px) {
-    .grid-layout {
-        grid-template-columns: repeat(2, 1fr) !important;
-        gap: 8px !important; 
-        padding: 8px !important;
-    }
-}
-
-/* حاوية الصورة */
+/* حاوية الصورة/الفيديو */
 .card-media-box {
     width: 100%;
     aspect-ratio: 16 / 9;
     background: #000;
     position: relative;
     overflow: hidden;
-    cursor: pointer;
 }
 
 .video-preview-container {
@@ -238,257 +224,117 @@ body {
 .video-thumb-img {
     width: 100%;
     height: 100%;
-    object-fit: cover; 
+    object-fit: cover;
     transition: transform 0.5s ease;
 }
+.lesson-card:hover .video-thumb-img { transform: scale(1.07); }
 
-.lesson-card:hover .video-thumb-img {
-    transform: scale(1.08); 
-}
-
+/* أيقونة الفيديو (تشغيل) */
 .play-icon-overlay {
     position: absolute;
     inset: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(0, 0, 0, 0.2); 
-    transition: 0.3s;
+    background: rgba(0,0,0,0.2);
+    transition: background 0.25s;
 }
-
 .play-icon-overlay i {
-    font-size: 3rem;
+    font-size: 2.8rem;
     color: var(--gold);
-    filter: drop-shadow(0 0 10px rgba(0,0,0,0.5));
+    filter: drop-shadow(0 0 10px rgba(0,0,0,0.6));
+    transition: transform 0.2s;
 }
+.lesson-card:hover .play-icon-overlay { background: rgba(0,0,0,0.05); }
+.lesson-card:hover .play-icon-overlay i { transform: scale(1.15); }
 
-.lesson-card:hover .play-icon-overlay {
-    background: rgba(0, 0, 0, 0); 
+/* أيقونة الصورة */
+.image-icon-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.3);
+    transition: background 0.25s;
 }
+.image-icon-overlay i {
+    font-size: 2rem;
+    color: rgba(197,160,89,0.8);
+    filter: drop-shadow(0 0 8px rgba(0,0,0,0.6));
+    transition: transform 0.2s;
+}
+.lesson-card:hover .image-icon-overlay { background: rgba(0,0,0,0.1); }
+.lesson-card:hover .image-icon-overlay i { transform: scale(1.15); }
 
 @media (max-width: 480px) {
-    .play-icon-overlay i {
-        font-size: 2rem;
-    }
+    .play-icon-overlay i { font-size: 1.8rem; }
+    .image-icon-overlay i { font-size: 1.5rem; }
 }
 
-/* تنسيق العنوان المرن */
+/* اسم الدرس */
 .lesson-name {
-    font-size: clamp(12px, 2.5vw, 14px) !important;
+    font-size: clamp(11px, 2.5vw, 13px) !important;
     font-weight: 800;
     color: #ffffff;
     text-align: center;
-    line-height: 1.2; 
-    padding: 5px 4px;
+    line-height: 1.2;
+    padding: 4px 4px;
     margin: 0;
     display: -webkit-box;
-    -webkit-line-clamp: 2; 
+    -webkit-line-clamp: 2;
     line-clamp: 2;
     -webkit-box-orient: vertical;
-    overflow: hidden; 
+    overflow: hidden;
     text-overflow: ellipsis;
-    word-break: keep-all; 
+    word-break: keep-all;
     overflow-wrap: break-word;
-    min-height: 2.4em; 
+    min-height: 2.4em;
 }
 
-/* التعديل الجديد عشان الكلام يوضح ويصغر */
+/* المقيمين */
+.card-raters {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    font-family: 'Cairo', sans-serif;
+    font-size: 9px;
+    color: rgba(255,255,255,0.3);
+}
+
+/* زرار المشاهدة */
+.play-btn {
+    font-family: 'Cairo', sans-serif;
+}
+
 @media (max-width: 480px) {
-    .grid-layout {
-        gap: 6px !important; 
-        padding: 6px !important;
-    }
-    .card-info {
-        padding: 6px !important;
-        gap: 4px !important;
-    }
-    .lesson-name {
-        font-size: 10px !important; /* صغرنا الخط جداً عشان ميزقش الكارت */
-        font-weight: 700;
-        line-height: 1.1;
-        min-height: 2.2em;
-    }
-    .play-btn {
-        padding: 5px 0 !important;
-        font-size: 9px !important;
-        border-radius: 5px !important;
-    }
-}
-
-@media (max-width: 768px) {
-    
-    /* 1. القائمة المنسدلة (زي ما هي ظبطت معاك) */
-    #drop-menu { width: 160px !important; }
-    #drop-menu button { padding: 8px 12px !important; font-size: 11px !important; }
-
-    /* =========================================
-       2. تصغير لوحة الإدارة (النسخة الملمومة جداً)
-       ========================================= */
-    
-    /* تقليل الهوامش الخارجية عشان اللوحة تاخد راحتها في الشاشة */
-    #admin-modal {
-        padding: 8px !important; 
-    }
-    
-    /* البوكس الأساسي بتاع اللوحة */
-    .admin-box {
-        padding: 12px !important; 
-        border-radius: 15px !important;
-        max-height: 95vh !important; /* عشان متخرجش بره الشاشة */
-    }
-    
-    /* تصغير عنوان اللوحة وعلامة الإغلاق (X) */
-    .admin-box > .flex {
-        margin-bottom: 10px !important;
-        padding-bottom: 8px !important;
-    }
-    .admin-box h3 { font-size: 14px !important; }
-    .admin-box .fa-times-circle { font-size: 22px !important; }
-
-    /* المربع الغامق اللي جواه الخانات (الاسم، الرابط، الصف) */
-    .admin-box .grid {
-        gap: 8px !important; /* تقليل المسافة بين الخانات جداً */
-        padding: 12px !important; /* تقليل الحشو الداخلي */
-        border-radius: 12px !important;
-    }
-    
-    /* الخانات نفسها (عصرناها عشان تبقى شيك) */
-    .admin-box input, 
-    .admin-box select {
-        padding: 6px 10px !important; 
-        font-size: 11px !important; 
-        border-radius: 8px !important;
-        height: 36px !important; /* ارتفاع ملموم */
-    }
-    
-    /* زرار "نشر الدرس" */
-    #pub-btn {
-        padding: 8px !important;
-        font-size: 12px !important;
-        border-radius: 8px !important;
-        margin-top: 4px !important;
-    }
-
-    /* منطقة "مركز حذف المحاضرات" */
-    .delete-section {
-        padding: 12px !important;
-        margin-top: 12px !important;
-        border-radius: 12px !important;
-    }
-    .delete-section h4 {
-        font-size: 12px !important;
-        margin-bottom: 8px !important;
-    }
-    
-    /* كروت الدروس اللي هتتحذف وزرار الحذف */
-    .delete-card {
-        padding: 8px 10px !important;
-        border-radius: 8px !important;
-        margin-bottom: 6px !important;
-    }
-    .delete-card span {
-        font-size: 10px !important; /* خط صغير ومقروء */
-    }
-    .delete-card button {
-        padding: 4px 8px !important;
-        font-size: 10px !important;
-        border-radius: 6px !important;
-    }
-
-/* =========================================
-       3. تظبيط منطقة اختيار الصف (Grade Picker)
-       ========================================= */
-    #grade-picker {
-        padding: 20px 15px !important;
-        justify-content: flex-start !important; 
-        padding-top: 60px !important;
-    }
-
-    #grade-picker h3 {
-        font-size: 18px !important;
-        margin-bottom: 25px !important;
-        line-height: 1.5 !important;
-    }
-
-    /* جعل الصفوف تظهر كـ 2 في كل صف بدل 1 */
-    #grade-picker .grid {
-        grid-template-columns: repeat(2, 1fr) !important; 
-        gap: 12px !important; 
-    }
-
-    /* تصغير حجم أزرار الصفوف */
-    #grade-picker button {
-        padding: 15px 10px !important; /* عصرنا الزرار بدل p-10 */
-        border-radius: 20px !important;
-        font-size: 13px !important;
-        min-height: 70px !important;
-        display: flex !important;
-        align-items: center;
-        justify-content: center;
-    }
-
-}
-
-/* تحسين شكل القائمة المنسدلة في لوحة الإدارة */
-#new-user-role option {
-    background-color: #111827 !important; /* لون غامق عشان يتماشى مع الثيم */
-    color: white !important; /* لون الخط */
-    padding: 10px;
-}
-
-#new-user-role:focus {
-    border-color: #3b82f6;
-    background-color: #1f2937;
+    .card-info { padding: 5px !important; gap: 3px !important; }
+    .lesson-name { font-size: 9px !important; min-height: 2.2em; }
+    .play-btn { padding: 4px 0 !important; font-size: 8px !important; border-radius: 5px !important; }
 }
 
 /* =========================================
-   إخفاء السكرول بار بالكامل (لشكل الـ APK)
+   مشغل الفيديو
    ========================================= */
-::-webkit-scrollbar {
-    width: 0px;
-    background: transparent; 
-    display: none;
-}
-
-* {
-    -ms-overflow-style: none;  /* لمتصفح إيدج وإنترنت إكسبلورر */
-    scrollbar-width: none;  /* لمتصفح فايرفوكس */
-}
-
-/* تأثير اللمعة داخل دائرة السهم فقط */
-.shimmer-container {
+.video-container {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background: black;
+    border-radius: 16px;
+    border: 2px solid var(--gold);
+    overflow: hidden;
     position: relative;
-    isolation: isolate;
+    box-shadow: 0 0 50px rgba(0,0,0,0.6);
 }
 
-.shimmer-light {
-    position: absolute;
-    top: 0;
-    left: -150%;
+#main-video-frame {
     width: 100%;
     height: 100%;
-    background: linear-gradient(
-        to right,
-        transparent,
-        rgba(255, 255, 255, 0.6),
-        transparent
-    );
-    transform: skewX(-20deg);
-    animation: quick-shine 3s infinite;
+    border: none;
 }
 
-@keyframes quick-shine {
-    0% { left: -150%; }
-    15% { left: 150%; } /* حركة سريعة */
-    100% { left: 150%; } /* انتظار */
-}
-
-/* ضبط ارتفاع الهيدر عشان ما يغطي على المحتوى */
-#app-header {
-    height: 60px !important;
-}
-
-/* علامة مائية تظهر فوق الفيديو بصعوبة */
+/* علامة مائية */
 .video-container::after {
     content: "Property of Al-Sherbini Academy";
     position: absolute;
@@ -496,25 +342,148 @@ body {
     left: 50%;
     transform: translate(-50%, -50%) rotate(-45deg);
     font-size: 2rem;
-    color: rgba(255, 255, 255, 0.03); /* باهتة جداً */
+    color: rgba(255,255,255,0.03);
     pointer-events: none;
     z-index: 100;
 }
 
-/* حركة اهتزاز للزينة */
+/* =========================================
+   ملف الطالب (Profile) - تصميم محسّن
+   ========================================= */
+.profile-modal-box {
+    animation: slideUpFade 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@media (min-width: 640px) {
+    .profile-modal-box {
+        animation: popIn 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+}
+
+@keyframes slideUpFade {
+    0% { opacity: 0; transform: translateY(60px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes popIn {
+    0% { opacity: 0; transform: scale(0.88) translateY(16px); }
+    100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* =========================================
+   منتقي الصف
+   ========================================= */
+@media (max-width: 768px) {
+    #grade-picker {
+        padding: 20px 15px !important;
+        justify-content: flex-start !important;
+        padding-top: 60px !important;
+    }
+    #grade-picker h3 {
+        font-size: 18px !important;
+        margin-bottom: 25px !important;
+        line-height: 1.5 !important;
+    }
+    #grade-picker .grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 12px !important;
+    }
+    #grade-picker button {
+        padding: 15px 10px !important;
+        border-radius: 20px !important;
+        font-size: 13px !important;
+        min-height: 70px !important;
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+    }
+}
+
+/* =========================================
+   لوحة الإدارة - موبايل
+   ========================================= */
+@media (max-width: 768px) {
+    #drop-menu { width: 160px !important; }
+    #drop-menu button { padding: 8px 12px !important; font-size: 10px !important; }
+
+    #admin-modal { padding: 8px !important; }
+
+    .admin-box {
+        padding: 14px !important;
+        border-radius: 16px !important;
+    }
+
+    .admin-box h3 { font-size: 14px !important; }
+    .admin-box .fa-times-circle { font-size: 22px !important; }
+
+    #pub-btn {
+        padding: 10px !important;
+        font-size: 13px !important;
+        border-radius: 10px !important;
+    }
+
+    .delete-section {
+        padding: 14px !important;
+        margin-top: 14px !important;
+        border-radius: 14px !important;
+    }
+    .delete-section h4 {
+        font-size: 13px !important;
+        margin-bottom: 10px !important;
+    }
+}
+
+@media (max-width: 480px) {
+    #user-avatar { width: 34px !important; height: 34px !important; border-radius: 10px !important; }
+    #user-first-name { font-size: 11px !important; }
+    #app-content {
+        padding-top: 16px !important;
+        padding-left: 12px !important;
+        padding-right: 12px !important;
+    }
+}
+
+/* =========================================
+   إخفاء شريط التمرير
+   ========================================= */
+::-webkit-scrollbar { width: 0px; background: transparent; display: none; }
+* { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* =========================================
+   تأثير اللمعة
+   ========================================= */
+.shimmer-container { position: relative; isolation: isolate; }
+.shimmer-light {
+    position: absolute;
+    top: 0;
+    left: -150%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(to right, transparent, rgba(255,255,255,0.6), transparent);
+    transform: skewX(-20deg);
+    animation: quick-shine 3s infinite;
+}
+@keyframes quick-shine {
+    0% { left: -150%; }
+    15% { left: 150%; }
+    100% { left: 150%; }
+}
+
+/* =========================================
+   حركة اهتزاز الزينة
+   ========================================= */
 .swing-anim {
     display: inline-block;
     animation: swing-effect 3s ease-in-out infinite;
     transform-origin: top center;
 }
-
 @keyframes swing-effect {
     0% { transform: rotate(10deg); }
     50% { transform: rotate(-10deg); }
     100% { transform: rotate(10deg); }
 }
 
-/* نجوم بتنور وتطفي في الخلفية */
+/* نجوم الخلفية في صفحة الدخول */
 #auth-screen::before {
     content: '★';
     position: absolute;
@@ -523,12 +492,14 @@ body {
     font-size: 8px;
     animation: flash 2s infinite;
 }
-
 @keyframes flash {
     0%, 100% { opacity: 0.2; }
     50% { opacity: 1; }
 }
 
+/* =========================================
+   شارة المشرف العام
+   ========================================= */
 .master-badge {
     background: linear-gradient(90deg, #ff4b1f, #ff9068) !important;
     color: white !important;
@@ -539,53 +510,33 @@ body {
     box-shadow: 0 0 12px rgba(255, 75, 31, 0.4);
     animation: pulse-red 2s infinite;
 }
-
 @keyframes pulse-red {
     0% { transform: scale(1); opacity: 1; }
     50% { transform: scale(1.05); opacity: 0.9; }
     100% { transform: scale(1); opacity: 1; }
 }
 
-/* تقييم النجوم */
-.star-rating {
-    display: flex;
-    justify-content: center;
-    gap: 3px;
-    padding: 4px 0;
-}
-.star-btn {
-    font-size: 13px;
-    color: #374151;
-    cursor: pointer;
-    transition: color 0.2s, transform 0.1s;
-}
+/* =========================================
+   تقييم النجوم
+   ========================================= */
+.star-rating { display: flex; justify-content: center; gap: 3px; padding: 4px 0; }
+.star-btn { font-size: 13px; color: #374151; cursor: pointer; transition: color 0.2s, transform 0.1s; }
 .star-btn:hover { transform: scale(1.2); }
 @media (max-width: 480px) { .star-btn { font-size: 11px; } }
 
-/* تعديل الزراير */
+/* =========================================
+   انيميشن فتح اللوحات
+   ========================================= */
 @keyframes modalEntry {
-    0% { opacity: 0; transform: scale(0.95) translateY(30px); filter: blur(10px); }
+    0% { opacity: 0; transform: scale(0.95) translateY(24px); filter: blur(6px); }
     100% { opacity: 1; transform: scale(1) translateY(0); filter: blur(0); }
 }
-.admin-box {
-    animation: modalEntry 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
 
-.tab-btn { transition: all 0.3s ease; }
-.tab-btn.active { 
-    background: #c5a059 !important; 
-    color: black !important; 
-    box-shadow: 0 0 15px rgba(197, 160, 89, 0.3); 
+/* =========================================
+   صندوق المستخدمين (select)
+   ========================================= */
+#new-user-role option {
+    background-color: #111827 !important;
+    color: white !important;
 }
-
-/* تنسيق كروت الإدارة لتوفير المساحة */
-.admin-lesson-item {
-    padding: 8px 12px !important; /* تقليل المساحة الداخلية */
-    margin-bottom: 8px !important; /* تقليل المسافة بين الكروت */
-    border-radius: 12px !important;
-}
-
-.admin-lesson-item .btn-action {
-    padding: 4px 10px !important; /* تصغير حجم أزرار التعديل والحذف */
-    font-size: 10px !important;
-}
+#new-user-role:focus { border-color: #3b82f6; background-color: #1f2937; }

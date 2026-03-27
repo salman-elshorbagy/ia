@@ -2,38 +2,72 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-
-<meta name="theme-color" content="#111827">
-
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="mobile-web-app-capable" content="yes">
-
-<!-- ✅ الصورة كـ favicon -->
-<link rel="icon" type="image/png" href="logo.png">
-<link rel="apple-touch-icon" href="logo.png">
-
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#111827">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <link rel="icon" type="image/png" href="logo.png">
+    <link rel="apple-touch-icon" href="logo.png">
     <title>أكاديمية الشربيني للكيمياء</title>
-    
     <script src="https://cdn.tailwindcss.com"></script>
-       <link rel="manifest" href="manifest.json">
+    <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
-
     <link rel="stylesheet" href="style.css">
-    <!-- إصلاح z-index التوست عشان يظهر فوق كل حاجة -->
     <style>
         div.swal2-container { z-index: 999999 !important; }
         div.swal2-container.swal2-top { z-index: 999999 !important; }
         div.swal2-toast-shown .swal2-container { z-index: 999999 !important; }
+
+        /* ====== تابز المحتوى الرئيسي ====== */
+        .content-tab-btn {
+            color: rgba(255,255,255,0.5);
+            transition: all 0.3s ease;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            font-family: 'Cairo', sans-serif;
+        }
+        .content-tab-btn.active {
+            background: #c5a059 !important;
+            color: #080c14 !important;
+            box-shadow: 0 0 15px rgba(197,160,89,0.3);
+        }
+
+        /* ====== تابز الصف في لوحة الأدمن ====== */
+        .admin-grade-tab {
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 700;
+            cursor: pointer;
+            font-family: 'Cairo', sans-serif;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.05);
+            color: rgba(255,255,255,0.6);
+            transition: all 0.2s;
+        }
+        .admin-grade-tab.active-ag {
+            background: #c5a059 !important;
+            color: #080c14 !important;
+            border-color: #c5a059 !important;
+        }
+
+        /* ====== شارة الوقت على الكارت ====== */
+        .card-time-badge {
+            color: rgba(255,255,255,0.2);
+            font-size: 9px;
+            font-family: 'Cairo', sans-serif;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
 
-
+<!-- ====== شاشة التحميل ====== -->
 <div id="splash-screen" class="fixed inset-0 z-[10000] bg-[#080c14] flex flex-col items-center justify-center transition-opacity duration-700">
     <div class="relative">
         <div class="w-24 h-24 border-2 border-[#c5a059]/20 rounded-full animate-ping"></div>
@@ -41,394 +75,445 @@
     </div>
     <h1 class="mt-8 text-white font-black tracking-[0.3em] text-sm animate-pulse">AL-SHERBINI ACADEMY</h1>
 </div>
-
 <script>
-    // إخفاء شاشة التحميل بعد ثانيتين
     window.addEventListener('load', () => {
         setTimeout(() => {
             const splash = document.getElementById('splash-screen');
             splash.style.opacity = '0';
-            // حذف العنصر من الصفحة بعد الانتهاء من التأثير البصري
-            setTimeout(() => splash.remove(), 500); 
-        }, 1000); // خليناها 1000 يعني ثانية واحدة "خبط لزق"
+            setTimeout(() => splash.remove(), 500);
+        }, 1000);
     });
 </script>
 
-    <section id="auth-screen" class="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[#080c14] p-6 overflow-hidden">
-        
-        <div class="absolute top-0 left-0 right-0 flex justify-between px-10 pointer-events-none opacity-80">
-            <div class="flex flex-col items-center animate__animated animate__fadeInDown">
-                <div class="w-[1px] h-20 bg-gray-600/50"></div>
-                <i class="fas fa-star text-[#c5a059] text-xl swing-anim"></i>
-            </div>
-            <div class="flex flex-col items-center animate__animated animate__fadeInDown">
-                <div class="w-[1px] h-12 bg-gray-600/50"></div>
-                <i class="fas fa-star text-[#c5a059] text-lg swing-anim"></i>
-            </div>
+<!-- ====== شاشة تسجيل الدخول ====== -->
+<section id="auth-screen" class="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[#080c14] p-6 overflow-hidden">
+    <div class="absolute top-0 left-0 right-0 flex justify-between px-10 pointer-events-none opacity-80">
+        <div class="flex flex-col items-center animate__animated animate__fadeInDown">
+            <div class="w-[1px] h-20 bg-gray-600/50"></div>
+            <i class="fas fa-star text-[#c5a059] text-xl swing-anim"></i>
         </div>
-        <div class="w-full max-w-sm bg-white/5 border border-white/10 rounded-[40px] p-8 backdrop-blur-md animate__animated animate__zoomIn relative z-10">
-            
-            <div class="w-20 h-20 bg-[#c5a059] rounded-[28px] mx-auto mb-6 flex items-center justify-center shadow-2xl shadow-[#c5a059]/20">
-                <i class="fas fa-atom text-3xl text-black animate-spin-slow"></i>
-            </div>
-
-            <div class="text-center mb-8">
-                <h1 class="text-xl font-black text-white mb-2">أكاديمية الشربيني</h1>
-                <p class="text-gray-400 text-xs font-bold">بوابة التفوق في الكيمياء والعلوم</p>
-            </div>
-
-            <button onclick="login()" class="btn-gold w-full py-4 rounded-2xl font-black text-sm flex items-center justify-center gap-3 transition-transform active:scale-95 shadow-lg shadow-[#c5a059]/10">
-                <i class="fab fa-google text-lg"></i>
-                <span>دخول المنصة</span>
-            </button>
-
-            <div class="mt-10 pt-6 border-t border-white/10 text-center">
-                <p class="text-gray-500 text-[10px] font-black mb-1 tracking-widest uppercase">للتواصل والاشتراك</p>
-                
-                <p class="text-[#c5a059] text-[9px] font-bold mb-3 animate-pulse">👇 اضغط هنا للتحدث مع المستر مباشرة 👇</p>
-                
-                <a href="https://wa.me/201014401852" target="_blank" 
-                   class="inline-flex items-center gap-3 bg-[#25D366]/10 hover:bg-[#25D366]/20 border border-[#25D366]/30 px-5 py-2.5 rounded-full transition-all group shadow-lg shadow-[#25D366]/5">
-                    
-                    <i class="fab fa-whatsapp text-[#25D366] text-xl group-hover:scale-110 transition-transform"></i>
-                    
-                    <div class="flex flex-col text-right">
-                        <span class="text-white text-[11px] font-black group-hover:text-[#25D366] transition-colors">مستر محمد الشربيني</span>
-                        <span class="text-[#25D366] text-[12px] font-mono tracking-wider">01014401852</span>
-                    </div>
-                </a>
-            </div>
-        </div>
-
-        <div class="mt-8 flex flex-col items-center gap-1 opacity-40">
-    <p class="text-gray-600 text-[9px] font-bold tracking-widest uppercase">جميع الحقوق محفوظة © 2026</p>
-    <p class="text-[#c5a059] text-[10px]" style="font-family: 'Times New Roman', serif; letter-spacing: 2px;">
-       Developed by <span class="font-black italic">SALMAN-ALSHORBAGY</span>
-    </p>
-</div>
-    </section>
-
-    <header id="app-header" class="hidden sticky top-0 z-[1000] border-b border-white/5 bg-[#0f172a]/95 backdrop-blur-md px-4 py-2">
-        <div class="container mx-auto flex justify-between items-center h-12">
-            
-            <div class="relative">
-                <div class="flex items-center gap-2 cursor-pointer group bg-white/5 hover:bg-white/10 p-1 pr-3 rounded-2xl border border-white/5 transition-all" onclick="toggleMenu()">
-                    
-                    <span id="user-first-name" class="font-black text-white text-[12px]"></span>
-                    
-                    <img id="user-avatar" class="w-9 h-9 rounded-xl border border-[#c5a059]/50 object-cover" src="" alt="">
-                    
-                    <div class="w-7 h-7 rounded-full bg-[#c5a059] flex items-center justify-center relative overflow-hidden shimmer-container">
-                        <i class="fas fa-chevron-down text-[10px] text-black relative z-10"></i>
-                        <div class="shimmer-light"></div>
-                    </div>
-                </div>
-
-                <div id="drop-menu" class="hidden absolute right-0 mt-2 w-44 bg-[#111827] border border-white/10 rounded-2xl shadow-2xl p-2 z-[5000] animate__animated animate__fadeInUp">
-                    <button onclick="openProfile()" class="w-full text-right p-3 hover:bg-white/5 rounded-xl text-[11px] font-black flex items-center gap-3 text-white transition">
-                        <i class="fas fa-user-circle text-[#c5a059]"></i> ملفي الشخصي
-                    </button>
-                    <button onclick="openGradePicker()" class="w-full text-right p-3 hover:bg-white/5 rounded-xl text-[11px] font-black flex items-center gap-3 text-white transition">
-                        <i class="fas fa-sync text-[#c5a059]"></i> تغيير الصف
-                    </button>
-                    <button onclick="checkAdmin()" class="w-full text-right p-3 hover:bg-red-500/10 rounded-xl text-[11px] font-black text-red-400 flex items-center gap-3 transition">
-                        <i class="fas fa-user-shield"></i> لوحة المدرس
-                    </button>
-                    <div class="border-t border-white/5 my-1"></div>
-                    <button onclick="logout()" class="w-full text-right p-3 hover:bg-white/5 rounded-xl text-[11px] font-black text-gray-400 flex items-center gap-3 transition">
-                        <i class="fas fa-power-off text-red-500"></i> خروج
-                    </button>
-                </div>
-            </div>
-
-            <div class="flex flex-col text-left mr-2">
-    <h2 class="font-black text-xs md:text-lg text-[#c5a059] italic leading-tight">
-        منصة أ/محمد الشربيني
-    </h2>
-    <span class="text-[9px] text-white/40 font-bold tracking-[1px] mt-1 pt-0.5" 
-          style="font-family: 'Arial', sans-serif; border-top: 1px solid rgba(197, 160, 89, 0.2);">
-        BY: SALMAN-ALSHORBAGY
-    </span>
-</div>
-        </div>
-    </header>
-
-    <div id="grade-picker" class="fixed inset-0 z-[8000] bg-[#080c14] hidden flex flex-col items-center justify-center p-6 text-center overflow-y-auto">
-        <h3 class="text-3xl font-black mb-12 animate__animated animate__fadeInDown">مرحباً بك.. اختر صفك الدراسي</h3>
-        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 w-full max-w-5xl animate__animated animate__zoomIn">
-            <button onclick="selectGrade('1-mid', 'الأول الإعدادي')" class="p-10 bg-white/5 rounded-[40px] border border-white/10 font-black hover:border-white transition">أولى إعدادي</button>
-            <button onclick="selectGrade('2-mid', 'الثاني الإعدادي')" class="p-10 bg-white/5 rounded-[40px] border border-white/10 font-black hover:border-white transition">تانية إعدادي</button>
-            <button onclick="selectGrade('3-mid', 'الثالث الإعدادي')" class="p-10 bg-white/5 rounded-[40px] border border-white/10 font-black hover:border-white transition">تالتة إعدادي</button>
-            <button onclick="selectGrade('1-sec', 'الأول الثانوي')" class="p-10 bg-[#c5a059]/10 rounded-[40px] border border-[#c5a059]/30 font-black text-[#c5a059] hover:bg-[#c5a059]/20 transition">أولى ثانوي</button>
-            <button onclick="selectGrade('2-sec', 'الثاني الثانوي')" class="p-10 bg-[#c5a059]/10 rounded-[40px] border border-[#c5a059]/30 font-black text-[#c5a059] hover:bg-[#c5a059]/20 transition">تانية ثانوي</button>
-            <button onclick="selectGrade('3-sec', 'الثالث الثانوي')" class="p-10 bg-[#c5a059]/10 rounded-[40px] border border-[#c5a059]/30 font-black text-[#c5a059] hover:bg-[#c5a059]/20 transition">تالتة ثانوي</button>
+        <div class="flex flex-col items-center animate__animated animate__fadeInDown">
+            <div class="w-[1px] h-12 bg-gray-600/50"></div>
+            <i class="fas fa-star text-[#c5a059] text-lg swing-anim"></i>
         </div>
     </div>
-
-    <div id="admin-modal" class="modal-overlay hidden" style="display:none;">
-        <div class="admin-box animate__animated animate__zoomIn relative">
-            <div class="flex justify-between items-center mb-6 border-b border-white/10 pb-4">
-                <h3 class="text-lg md:text-2xl font-black text-[#c5a059]">لوحة التحكم ⚙️</h3>
-                <i onclick="closeAdmin()" class="fas fa-times-circle text-2xl md:text-4xl cursor-pointer text-slate-500 hover:text-white transition"></i>
-            </div>
-
-            <div class="flex gap-2 mb-6 p-1 bg-black/40 rounded-2xl border border-white/5">
-                <button onclick="switchTab('lessons')" id="btn-tab-lessons" 
-        class="tab-btn active flex-1 py-3 rounded-xl font-black text-[11px] md:text-sm transition-all duration-300">
-    🎥 إدارة الدروس
-</button>
-                <button onclick="switchTab('users')" id="btn-tab-users" 
-        class="tab-btn flex-1 py-3 rounded-xl font-black text-[11px] md:text-sm transition-all duration-300">
-    🔐 صلاحيات الوصول
-</button>
-            </div>
-
-            <div id="section-lessons">
-                <div class="grid grid-cols-1 gap-4 bg-[#080c14] p-5 md:p-8 rounded-[25px] border border-white/5 shadow-inner mb-8">
-                    <h4 class="font-black text-sm md:text-base mb-2 text-[#c5a059]">رفع محاضرة جديدة:</h4>
-                    <input type="text" id="v-title" placeholder="اسم الدرس" class="p-5 bg-white/5 rounded-2xl border border-white/10 outline-none focus:border-[#c5a059]">
-                    <input type="text" id="v-url" placeholder="رابط يوتيوب أو جوجل درايف" class="p-5 bg-white/5 rounded-2xl border border-white/10 outline-none focus:border-[#c5a059]">
-                    <select id="v-grade" class="p-5 bg-[#111827] text-white rounded-2xl border border-white/10 outline-none font-bold">
-                        <option value="1-mid">الأول الإعدادي</option>
-                        <option value="2-mid">الثاني الإعدادي</option>
-                        <option value="3-mid">الثالث الإعدادي</option>
-                        <option value="1-sec">الأول الثانوي</option>
-                        <option value="2-sec">الثاني الثانوي</option>
-                        <option value="3-sec">الثالث الثانوي</option>
-                    </select>
-                    <button onclick="publish()" id="pub-btn" class="btn-gold p-5 rounded-2xl font-black text-lg">نشر الدرس الآن 🚀</button>
+    <div class="w-full max-w-sm bg-white/5 border border-white/10 rounded-[40px] p-8 backdrop-blur-md animate__animated animate__zoomIn relative z-10">
+        <div class="w-20 h-20 bg-[#c5a059] rounded-[28px] mx-auto mb-6 flex items-center justify-center shadow-2xl shadow-[#c5a059]/20">
+            <i class="fas fa-atom text-3xl text-black animate-spin-slow"></i>
+        </div>
+        <div class="text-center mb-8">
+            <h1 class="text-xl font-black text-white mb-2">أكاديمية الشربيني</h1>
+            <p class="text-gray-400 text-xs font-bold">بوابة التفوق في الكيمياء والعلوم</p>
+        </div>
+        <button onclick="login()" class="btn-gold w-full py-4 rounded-2xl font-black text-sm flex items-center justify-center gap-3 transition-transform active:scale-95 shadow-lg shadow-[#c5a059]/10">
+            <i class="fab fa-google text-lg"></i>
+            <span>دخول المنصة</span>
+        </button>
+        <div class="mt-10 pt-6 border-t border-white/10 text-center">
+            <p class="text-gray-500 text-[10px] font-black mb-1 tracking-widest uppercase">للتواصل والاشتراك</p>
+            <p class="text-[#c5a059] text-[9px] font-bold mb-3 animate-pulse">👇 اضغط هنا للتحدث مع المستر مباشرة 👇</p>
+            <a href="https://wa.me/201014401852" target="_blank"
+               class="inline-flex items-center gap-3 bg-[#25D366]/10 hover:bg-[#25D366]/20 border border-[#25D366]/30 px-5 py-2.5 rounded-full transition-all group shadow-lg shadow-[#25D366]/5">
+                <i class="fab fa-whatsapp text-[#25D366] text-xl group-hover:scale-110 transition-transform"></i>
+                <div class="flex flex-col text-right">
+                    <span class="text-white text-[11px] font-black group-hover:text-[#25D366] transition-colors">مستر محمد الشربيني</span>
+                    <span class="text-[#25D366] text-[12px] font-mono tracking-wider">01014401852</span>
                 </div>
-
-                <div class="delete-section">
-                    <h4 class="font-black text-red-500 text-xl mb-8 flex items-center gap-3"><i class="fas fa-trash-alt"></i> مركز حذف المحاضرات</h4>
-                    <div id="admin-lessons-list" class="space-y-4 max-h-[400px] overflow-y-auto pr-2"></div>
-                </div>
-            </div>
-
-            <div id="section-users" class="hidden">
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <div class="bg-black/30 p-6 rounded-3xl border border-white/5">
-                        <label class="block text-gray-400 text-sm mb-2 text-right">إيميل المستخدم (Gmail):</label>
-                        <input type="email" id="new-user-email" placeholder="example@gmail.com" 
-                            class="w-full bg-white/5 border border-white/10 p-4 rounded-xl mb-4 text-white focus:outline-none focus:border-blue-500 text-left">
-                        
-                        <label class="block text-gray-400 text-sm mb-2 text-right">نوع الحساب:</label>
-                        <select id="new-user-role" class="w-full bg-[#111827] border border-white/10 p-4 rounded-xl mb-6 text-white">
-                            <option value="student">🎓 طالب منتظم</option>
-                            <option value="teacher">🛡️ مدرس مساعد</option>
-                            <option value="master">👑 مشرف عام</option>
-                        </select>
-
-                        <button id="add-user-btn" onclick="addUser()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-black p-4 rounded-xl transition shadow-lg shadow-blue-600/20">
-                            إضافة الإيميل الآن +
-                        </button>
-                    </div>
-
-                    <div class="bg-black/30 p-6 rounded-3xl border border-white/5">
-                        <label class="block text-gray-400 text-sm mb-4 text-right italic">قائمة التحكم في الرتب:</label>
-                        <div id="admin-users-list" class="max-h-[400px] overflow-y-auto space-y-2 pr-2">
-                             </div>
-                    </div>
-                </div>
-            </div>
+            </a>
         </div>
     </div>
-
-    <!-- ====== صفحة ملف الطالب (Profile) ====== -->
-    <div id="profile-modal" style="display:none" class="fixed inset-0 z-[15000] bg-[#080c14]/95 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
-        <div class="w-full max-w-md bg-[#111827] border border-white/10 rounded-[30px] p-6 relative animate__animated animate__zoomIn">
-            <button onclick="closeProfile()" class="absolute top-4 left-4 text-gray-500 hover:text-white transition text-2xl">&times;</button>
-            <div class="flex flex-col items-center mb-6">
-                <img id="profile-avatar" src="" referrerpolicy="no-referrer"
-                     class="w-24 h-24 rounded-[20px] border-2 border-[#c5a059] object-cover shadow-xl shadow-[#c5a059]/10 mb-4">
-                <h2 id="profile-name" class="text-xl font-black text-white"></h2>
-                <p id="profile-email" class="text-gray-400 text-xs mt-1"></p>
-                <span id="profile-role-badge" class="mt-2 text-xs font-black px-3 py-1 rounded-full"></span>
-            </div>
-            <div class="grid grid-cols-2 gap-3 mb-4">
-                <div class="bg-black/30 rounded-2xl p-4 text-center border border-white/5">
-                    <p class="text-[#c5a059] text-2xl font-black" id="profile-watched">0</p>
-                    <p class="text-gray-400 text-[10px] font-bold mt-1">درس شاهدته</p>
-                </div>
-                <div class="bg-black/30 rounded-2xl p-4 text-center border border-white/5">
-                    <p class="text-[#c5a059] text-lg font-black leading-tight" id="profile-grade-text">-</p>
-                    <p class="text-gray-400 text-[10px] font-bold mt-1">صفك الدراسي</p>
-                </div>
-            </div>
-
-            <!-- تغيير الاسم -->
-            <div class="bg-black/30 rounded-2xl p-4 border border-white/5 mb-4">
-                <p class="text-gray-400 text-[11px] font-bold mb-2 flex items-center gap-2">
-                    <i class="fas fa-pen text-[#c5a059]"></i> الاسم في التعليقات
-                </p>
-                <div class="flex gap-2">
-                    <input id="profile-display-name-input" type="text" placeholder="اكتب اسمك المخصص..."
-                        class="flex-1 bg-white/5 border border-white/10 rounded-xl text-white text-sm p-2.5 outline-none focus:border-[#c5a059] font-bold"
-                        style="font-family:'Cairo',sans-serif;">
-                    <button onclick="saveDisplayName()"
-                        class="btn-gold px-4 rounded-xl font-black text-xs flex-shrink-0">حفظ</button>
-                </div>
-            </div>
-
-            <button onclick="closeProfile(); openGradePicker();"
-                    class="w-full bg-white/5 hover:bg-white/10 border border-white/10 text-white font-black text-sm py-3 rounded-2xl transition flex items-center justify-center gap-2">
-                <i class="fas fa-sync text-[#c5a059]"></i> تغيير الصف الدراسي
-            </button>
-            <button onclick="logout()"
-                    class="w-full mt-3 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 font-black text-sm py-3 rounded-2xl transition flex items-center justify-center gap-2">
-                <i class="fas fa-power-off"></i> تسجيل الخروج
-            </button>
-        </div>
+    <div class="mt-8 flex flex-col items-center gap-1 opacity-40">
+        <p class="text-gray-600 text-[9px] font-bold tracking-widest uppercase">جميع الحقوق محفوظة © 2026</p>
+        <p class="text-[#c5a059] text-[10px]" style="font-family: 'Times New Roman', serif; letter-spacing: 2px;">
+            Developed by <span class="font-black italic">SALMAN-ALSHORBAGY</span>
+        </p>
     </div>
+</section>
 
-    <div id="video-player-modal" style="display:none; position:fixed; inset:0; z-index:20000; background:rgba(5,8,15,0.97); overflow-y:auto; -webkit-overflow-scrolling:touch;" onclick="closePlayer()">
-        <div style="width:100%; max-width:1100px; margin:0 auto; padding:12px 12px 80px; display:flex; flex-direction:column; gap:14px; box-sizing:border-box;" onclick="event.stopPropagation()">
-
-            <!-- هيدر: عنوان + زرار إغلاق -->
-            <div style="display:flex; align-items:center; justify-content:space-between; padding-top:6px;">
-                <h3 id="video-title-display" style="color:white; font-family:'Cairo',sans-serif; font-weight:900; font-size:clamp(13px,3vw,18px); margin:0; flex:1; line-height:1.4; padding-left:10px;"></h3>
-                <button onclick="closePlayer()" style="background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.1); color:white; width:40px; height:40px; border-radius:50%; font-size:20px; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; transition:background 0.2s;" onmouseover="this.style.background='rgba(239,68,68,0.2)'" onmouseout="this.style.background='rgba(255,255,255,0.08)'">&times;</button>
-            </div>
-
-            <!-- الفيديو -->
-            <div class="video-container animate__animated animate__zoomIn" style="border-radius:16px; overflow:hidden;">
-                <iframe id="main-video-frame" src="" frameborder="0"
-                    allow="autoplay; fullscreen; picture-in-picture;"
-                    allowfullscreen webkitallowfullscreen mozallowfullscreen></iframe>
-            </div>
-
-            <!-- شريط التقييم + زرار تفاصيل -->
-            <div style="background:#0f172a; border:1px solid rgba(197,160,89,0.15); border-radius:16px; padding:14px 16px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
-                <!-- النجوم + المتوسط -->
-                <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
-                    <div style="display:flex; flex-direction:column; gap:4px;">
-                        <span style="color:rgba(255,255,255,0.4); font-family:'Cairo',sans-serif; font-size:10px; font-weight:700;">قيّم هذا الدرس</span>
-                        <div id="modal-stars" style="display:flex; gap:5px;">
-                            <i class="fas fa-star modal-star" data-val="1" style="font-size:22px; color:#374151; cursor:pointer; transition:all 0.15s;"></i>
-                            <i class="fas fa-star modal-star" data-val="2" style="font-size:22px; color:#374151; cursor:pointer; transition:all 0.15s;"></i>
-                            <i class="fas fa-star modal-star" data-val="3" style="font-size:22px; color:#374151; cursor:pointer; transition:all 0.15s;"></i>
-                            <i class="fas fa-star modal-star" data-val="4" style="font-size:22px; color:#374151; cursor:pointer; transition:all 0.15s;"></i>
-                            <i class="fas fa-star modal-star" data-val="5" style="font-size:22px; color:#374151; cursor:pointer; transition:all 0.15s;"></i>
-                        </div>
-                    </div>
-                    <div style="display:flex; align-items:center; gap:6px; background:rgba(197,160,89,0.1); border:1px solid rgba(197,160,89,0.25); border-radius:30px; padding:5px 12px;">
-                        <i class="fas fa-star" style="color:#c5a059; font-size:12px;"></i>
-                        <span id="modal-avg-val" style="color:#c5a059; font-weight:900; font-family:'Cairo',sans-serif; font-size:15px;">-</span>
-                        <span style="color:rgba(255,255,255,0.3); font-size:10px; font-family:'Cairo',sans-serif;">/ 5</span>
-                    </div>
-                </div>
-                <!-- عدد المقيمين + زرار التفاصيل -->
-                <div style="display:flex; align-items:center; gap:10px;">
-                    <div style="display:flex; align-items:center; gap:5px; color:rgba(255,255,255,0.4); font-family:'Cairo',sans-serif; font-size:11px;">
-                        <i class="fas fa-users" style="color:#c5a059;"></i>
-                        <span id="modal-raters-count">0</span>
-                        <span>قيّموا</span>
-                    </div>
-                    <button onclick="toggleRatingsPanel()" id="ratings-toggle-btn"
-                        style="background:rgba(197,160,89,0.1); border:1px solid rgba(197,160,89,0.2); color:#c5a059; border-radius:20px; padding:5px 12px; font-family:'Cairo',sans-serif; font-size:11px; font-weight:700; cursor:pointer; transition:all 0.2s;">
-                        <i class="fas fa-list-ul" style="margin-left:4px;"></i> التفاصيل
-                    </button>
+<!-- ====== الهيدر ====== -->
+<header id="app-header" class="hidden sticky top-0 z-[1000] border-b border-white/5 bg-[#0f172a]/95 backdrop-blur-md px-4 py-2">
+    <div class="container mx-auto flex justify-between items-center h-12">
+        <div class="relative">
+            <div class="flex items-center gap-2 cursor-pointer group bg-white/5 hover:bg-white/10 p-1 pr-3 rounded-2xl border border-white/5 transition-all" onclick="toggleMenu()">
+                <span id="user-first-name" class="font-black text-white text-[12px]"></span>
+                <img id="user-avatar" class="w-9 h-9 rounded-xl border border-[#c5a059]/50 object-cover" src="" alt="">
+                <div class="w-7 h-7 rounded-full bg-[#c5a059] flex items-center justify-center relative overflow-hidden shimmer-container">
+                    <i class="fas fa-chevron-down text-[10px] text-black relative z-10"></i>
+                    <div class="shimmer-light"></div>
                 </div>
             </div>
 
-            <!-- لوحة تفاصيل التقييمات (مخفية افتراضياً) -->
-            <div id="ratings-panel" style="display:none; background:#0f172a; border:1px solid rgba(197,160,89,0.12); border-radius:16px; overflow:hidden;">
-                <div style="padding:12px 16px; border-bottom:1px solid rgba(255,255,255,0.06); display:flex; align-items:center; gap:8px;">
-                    <i class="fas fa-star" style="color:#c5a059; font-size:13px;"></i>
-                    <span style="color:white; font-family:'Cairo',sans-serif; font-weight:900; font-size:13px;">تقييمات المتعلمين</span>
-                </div>
-                <div id="ratings-details-list" style="max-height:220px; overflow-y:auto; padding:6px 0;">
-                    <div style="text-align:center; padding:20px; color:rgba(255,255,255,0.25); font-family:'Cairo',sans-serif; font-size:12px;">
-                        لا توجد تقييمات بعد
-                    </div>
-                </div>
-            </div>
-
-            <!-- قسم التعليقات -->
-            <div style="background:#0f172a; border:1px solid rgba(255,255,255,0.07); border-radius:16px; overflow:hidden;">
-                <!-- هيدر التعليقات -->
-                <div style="padding:13px 16px; border-bottom:1px solid rgba(255,255,255,0.06); display:flex; align-items:center; gap:8px;">
-                    <i class="fas fa-comments" style="color:#c5a059;"></i>
-                    <span style="color:white; font-family:'Cairo',sans-serif; font-weight:900; font-size:13px;">التعليقات</span>
-                    <span id="comments-count" style="background:rgba(197,160,89,0.15); color:#c5a059; border-radius:30px; padding:1px 9px; font-size:11px; font-family:'Cairo',sans-serif; font-weight:700;">0</span>
-                </div>
-                <!-- خانة الكتابة -->
-                <div style="padding:12px 14px; border-bottom:1px solid rgba(255,255,255,0.05); display:flex; gap:10px; align-items:flex-start;">
-                    <img id="comment-my-avatar" src="" referrerpolicy="no-referrer"
-                         style="width:34px; height:34px; border-radius:10px; border:1px solid rgba(197,160,89,0.35); object-fit:cover; flex-shrink:0; margin-top:2px;"
-                         onerror="this.style.display='none'">
-                    <div style="flex:1; display:flex; flex-direction:column; gap:8px;">
-                        <!-- مؤشر الرد -->
-                        <div id="reply-indicator" style="display:none; align-items:center; justify-content:space-between; background:rgba(197,160,89,0.08); border:1px solid rgba(197,160,89,0.2); border-radius:8px; padding:5px 10px;">
-                            <span style="color:#c5a059; font-family:'Cairo',sans-serif; font-size:11px; font-weight:700;">
-                                <i class="fas fa-reply" style="margin-left:4px;"></i> ردك على: <span id="reply-to-name"></span>
-                            </span>
-                            <button onclick="cancelReply()" style="background:none;border:none;color:rgba(255,255,255,0.4);cursor:pointer;font-size:14px;padding:0;">&times;</button>
-                        </div>
-                        <textarea id="comment-input" placeholder="شاركنا رأيك في الدرس..." rows="2"
-                            style="width:100%; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.1); border-radius:12px; color:white; font-family:'Cairo',sans-serif; font-size:13px; padding:10px 12px; outline:none; resize:none; box-sizing:border-box; transition:border-color 0.2s; direction:rtl;"
-                            onfocus="this.style.borderColor='#c5a059'" onblur="this.style.borderColor='rgba(255,255,255,0.1)'"></textarea>
-                        <div style="display:flex; justify-content:flex-end;">
-                            <button onclick="submitComment()"
-                                style="background:linear-gradient(135deg,#c5a059,#edd3a1); color:#080c14; border:none; border-radius:10px; padding:8px 20px; font-family:'Cairo',sans-serif; font-weight:900; font-size:12px; cursor:pointer; display:flex; align-items:center; gap:6px;">
-                                نشر <i class="fas fa-paper-plane"></i>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-                <!-- قائمة التعليقات بسكرول -->
-                <div id="comments-list" style="min-height:80px; max-height:350px; overflow-y:auto; padding:4px 0; scroll-behavior:smooth;">
-                    <div style="text-align:center; padding:24px; color:rgba(255,255,255,0.2); font-family:'Cairo',sans-serif; font-size:12px;">
-                        <i class="fas fa-comment-dots" style="font-size:24px; margin-bottom:8px; display:block; opacity:0.4;"></i>
-                        لا توجد تعليقات بعد، كن أول من يعلّق!
-                    </div>
-                </div>
-            </div>
-
-        </div>
-    </div>
-
-    <main id="app-content" class="hidden container mx-auto px-4 py-6 md:px-6 md:py-12">
-        <div class="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12 border-r-8 border-[#c5a059] pr-6">
-           <h3 id="grade-title" class="text-lg md:text-3xl font-black">المحاضرات</h3>
-            
-            <div class="relative w-full md:w-80">
-                <span class="absolute inset-y-0 right-0 flex items-center pr-4">
-                    <i class="fas fa-search text-[#c5a059]"></i>
-                </span>
-                <input 
-                    type="text" 
-                    id="search-input" 
-                    onkeyup="filterVideos()" 
-                    placeholder="ابحث عن درس معين..." 
-                    class="w-full bg-white/5 border border-white/10 text-white text-sm rounded-2xl py-3 pr-12 pl-4 outline-none focus:border-[#c5a059] transition-all"
-                >
-            </div>
-        </div>
-        
-        <div id="lesson-grid" class="grid-layout"></div>
-    </main>
-
-    <script src="firebase-config.js"></script>
-
-    <template id="lesson-card-template">
-        <div class="lesson-card animate__animated animate__fadeIn">
-            <div class="card-media-box"></div>
-            <div class="card-info" style="padding:8px; display:flex; flex-direction:column; gap:5px;">
-                <h4 class="lesson-name font-black text-white text-center"></h4>
-                <!-- عدد المقيمين فقط بدون نجوم -->
-                <div class="card-raters" style="display:flex; align-items:center; justify-content:center; gap:4px; font-family:'Cairo',sans-serif; font-size:10px; color:rgba(255,255,255,0.35);">
-                    <i class="fas fa-star" style="color:#c5a059; font-size:9px;"></i>
-                    <span class="raters-count">-</span>
-                </div>
-                <button class="play-btn btn-gold w-full py-2 rounded-lg text-xs font-black">
-                    مشاهدة المحاضرة الآن <i class="fas fa-play-circle mr-1"></i>
+            <div id="drop-menu" class="hidden absolute right-0 mt-2 w-44 bg-[#111827] border border-white/10 rounded-2xl shadow-2xl p-2 z-[5000] animate__animated animate__fadeInUp" style="display:none; flex-direction:column;">
+                <button onclick="openProfile()" class="w-full text-right p-3 hover:bg-white/5 rounded-xl text-[11px] font-black flex items-center gap-3 text-white transition">
+                    <i class="fas fa-user-circle text-[#c5a059]"></i> ملفي الشخصي
+                </button>
+                <!-- زرار تغيير الصف - يُخفى للطلاب ذوي الصف الواحد بـ JS -->
+                <button onclick="openGradePicker(); toggleMenu();" class="change-grade-btn w-full text-right p-3 hover:bg-white/5 rounded-xl text-[11px] font-black flex items-center gap-3 text-white transition">
+                    <i class="fas fa-sync text-[#c5a059]"></i> تغيير الصف
+                </button>
+                <button onclick="checkAdmin()" class="w-full text-right p-3 hover:bg-red-500/10 rounded-xl text-[11px] font-black text-red-400 flex items-center gap-3 transition">
+                    <i class="fas fa-user-shield"></i> لوحة المدرس
+                </button>
+                <div class="border-t border-white/5 my-1"></div>
+                <button onclick="logout()" class="w-full text-right p-3 hover:bg-white/5 rounded-xl text-[11px] font-black text-gray-400 flex items-center gap-3 transition">
+                    <i class="fas fa-power-off text-red-500"></i> خروج
                 </button>
             </div>
         </div>
-    </template>
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
-    <script src="app.js"></script>
+        <div class="flex flex-col text-left mr-2">
+            <h2 class="font-black text-xs md:text-lg text-[#c5a059] italic leading-tight">
+                منصة أ/محمد الشربيني
+            </h2>
+            <span class="text-[9px] text-white/40 font-bold tracking-[1px] mt-1 pt-0.5"
+                  style="font-family: 'Arial', sans-serif; border-top: 1px solid rgba(197, 160, 89, 0.2);">
+                BY: SALMAN-ALSHORBAGY
+            </span>
+        </div>
+    </div>
+</header>
+
+<!-- ====== منتقي الصف ====== -->
+<div id="grade-picker" class="fixed inset-0 z-[8000] bg-[#080c14] hidden flex flex-col items-center justify-center p-6 text-center overflow-y-auto">
+    <h3 class="text-3xl font-black mb-12 animate__animated animate__fadeInDown">مرحباً بك.. اختر صفك الدراسي</h3>
+    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 w-full max-w-5xl animate__animated animate__zoomIn">
+        <button data-grade="1-mid" onclick="selectGrade('1-mid', 'الأول الإعدادي')" class="p-10 bg-white/5 rounded-[40px] border border-white/10 font-black hover:border-white transition">أولى إعدادي</button>
+        <button data-grade="2-mid" onclick="selectGrade('2-mid', 'الثاني الإعدادي')" class="p-10 bg-white/5 rounded-[40px] border border-white/10 font-black hover:border-white transition">تانية إعدادي</button>
+        <button data-grade="3-mid" onclick="selectGrade('3-mid', 'الثالث الإعدادي')" class="p-10 bg-white/5 rounded-[40px] border border-white/10 font-black hover:border-white transition">تالتة إعدادي</button>
+        <button data-grade="1-sec" onclick="selectGrade('1-sec', 'الأول الثانوي')" class="p-10 bg-[#c5a059]/10 rounded-[40px] border border-[#c5a059]/30 font-black text-[#c5a059] hover:bg-[#c5a059]/20 transition">أولى ثانوي</button>
+        <button data-grade="2-sec" onclick="selectGrade('2-sec', 'الثاني الثانوي')" class="p-10 bg-[#c5a059]/10 rounded-[40px] border border-[#c5a059]/30 font-black text-[#c5a059] hover:bg-[#c5a059]/20 transition">تانية ثانوي</button>
+        <button data-grade="3-sec" onclick="selectGrade('3-sec', 'الثالث الثانوي')" class="p-10 bg-[#c5a059]/10 rounded-[40px] border border-[#c5a059]/30 font-black text-[#c5a059] hover:bg-[#c5a059]/20 transition">تالتة ثانوي</button>
+    </div>
+</div>
+
+<!-- ====== لوحة التحكم ====== -->
+<div id="admin-modal" class="modal-overlay hidden" style="display:none;">
+    <div class="admin-box animate__animated animate__zoomIn relative">
+        <div class="flex justify-between items-center mb-6 border-b border-white/10 pb-4">
+            <h3 class="text-lg md:text-2xl font-black text-[#c5a059]">لوحة التحكم ⚙️</h3>
+            <i onclick="closeAdmin()" class="fas fa-times-circle text-2xl md:text-4xl cursor-pointer text-slate-500 hover:text-white transition"></i>
+        </div>
+
+        <div class="flex gap-2 mb-6 p-1 bg-black/40 rounded-2xl border border-white/5">
+            <button onclick="switchTab('lessons')" id="btn-tab-lessons"
+                    class="tab-btn active flex-1 py-3 rounded-xl font-black text-[11px] md:text-sm transition-all duration-300">
+                🎥 إدارة المحتوى
+            </button>
+            <button onclick="switchTab('users')" id="btn-tab-users"
+                    class="tab-btn flex-1 py-3 rounded-xl font-black text-[11px] md:text-sm transition-all duration-300">
+                🔐 صلاحيات الوصول
+            </button>
+        </div>
+
+        <!-- تبويب الدروس -->
+        <div id="section-lessons">
+
+            <!-- ====== منتقي الصف داخل لوحة الأدمن ====== -->
+            <div class="bg-black/30 rounded-2xl border border-white/5 p-4 mb-4">
+                <p class="text-gray-400 text-xs font-bold mb-3 flex items-center gap-2">
+                    <i class="fas fa-layer-group text-[#c5a059]"></i> اختر الصف لعرض وإدارة محتواه:
+                </p>
+                <div id="admin-grade-tabs" class="flex flex-wrap gap-2">
+                    <button onclick="adminSwitchGrade('1-mid')" data-ag="1-mid" class="admin-grade-tab">إعدادي ١</button>
+                    <button onclick="adminSwitchGrade('2-mid')" data-ag="2-mid" class="admin-grade-tab">إعدادي ٢</button>
+                    <button onclick="adminSwitchGrade('3-mid')" data-ag="3-mid" class="admin-grade-tab">إعدادي ٣</button>
+                    <button onclick="adminSwitchGrade('1-sec')" data-ag="1-sec" class="admin-grade-tab">ثانوي ١</button>
+                    <button onclick="adminSwitchGrade('2-sec')" data-ag="2-sec" class="admin-grade-tab">ثانوي ٢</button>
+                    <button onclick="adminSwitchGrade('3-sec')" data-ag="3-sec" class="admin-grade-tab">ثانوي ٣</button>
+                </div>
+            </div>
+
+            <!-- فورم رفع المحتوى -->
+            <div class="grid grid-cols-1 gap-3 bg-[#080c14] p-5 md:p-6 rounded-[20px] border border-white/5 shadow-inner mb-6">
+                <h4 class="font-black text-sm md:text-base mb-1 text-[#c5a059]">رفع محتوى جديد:</h4>
+                <input type="text" id="v-title" placeholder="اسم الدرس أو الصورة" class="p-4 bg-white/5 rounded-xl border border-white/10 outline-none focus:border-[#c5a059] text-sm">
+                <input type="text" id="v-url" placeholder="رابط يوتيوب أو جوجل درايف" class="p-4 bg-white/5 rounded-xl border border-white/10 outline-none focus:border-[#c5a059] text-sm">
+                <select id="v-type" class="p-4 bg-[#111827] text-white rounded-xl border border-white/10 outline-none font-bold text-sm">
+                    <option value="video">🎥 محاضرة فيديو</option>
+                    <option value="image">🖼️ صورة / مستند</option>
+                </select>
+                <select id="v-grade" class="p-4 bg-[#111827] text-white rounded-xl border border-white/10 outline-none font-bold text-sm">
+                    <option value="1-mid">الأول الإعدادي</option>
+                    <option value="2-mid">الثاني الإعدادي</option>
+                    <option value="3-mid">الثالث الإعدادي</option>
+                    <option value="1-sec">الأول الثانوي</option>
+                    <option value="2-sec">الثاني الثانوي</option>
+                    <option value="3-sec">الثالث الثانوي</option>
+                </select>
+                <button onclick="publish()" id="pub-btn" class="btn-gold p-5 rounded-2xl font-black text-lg">نشر المحتوى الآن 🚀</button>
+            </div>
+
+            <!-- قائمة إدارة المحتوى -->
+            <div class="delete-section">
+                <h4 class="font-black text-red-500 text-xl mb-6 flex items-center gap-3"><i class="fas fa-trash-alt"></i> مركز إدارة المحتوى</h4>
+                <div id="admin-lessons-list" class="space-y-2 max-h-[350px] overflow-y-auto pr-1"></div>
+            </div>
+        </div>
+
+        <!-- تبويب المستخدمين -->
+        <div id="section-users" class="hidden">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                <!-- فورم الإضافة -->
+                <div class="bg-black/30 p-5 rounded-2xl border border-white/5">
+                    <label class="block text-gray-400 text-xs mb-2 text-right font-bold">إيميل المستخدم (Gmail):</label>
+                    <input type="email" id="new-user-email" placeholder="example@gmail.com"
+                        class="w-full bg-white/5 border border-white/10 p-3 rounded-xl mb-3 text-white text-sm focus:outline-none focus:border-blue-500 text-left font-mono">
+
+                    <label class="block text-gray-400 text-xs mb-2 text-right font-bold">نوع الحساب:</label>
+                    <select id="new-user-role" onchange="toggleGradesContainer(this.value)"
+                            class="w-full bg-[#111827] border border-white/10 p-3 rounded-xl mb-3 text-white text-sm font-bold">
+                        <option value="student">🎓 طالب</option>
+                        <option value="master">👑 مشرف عام</option>
+                    </select>
+
+                    <!-- صفوف الطالب -->
+                    <div id="user-grades-container" class="mb-4">
+                        <label class="block text-gray-400 text-xs mb-2 text-right font-bold">حدد الصوفوف المسموح بها للطالب بدخولها:</label>
+                        <div class="grid grid-cols-2 gap-2 bg-black/20 p-3 rounded-xl border border-white/5">
+                            <label class="flex items-center gap-2 cursor-pointer group">
+                                <input type="checkbox" class="grade-check" value="1-mid"
+                                       style="accent-color:#c5a059; width:14px; height:14px; cursor:pointer;">
+                                <span class="text-white text-xs font-bold group-hover:text-[#c5a059] transition">أولى إعدادي</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer group">
+                                <input type="checkbox" class="grade-check" value="2-mid"
+                                       style="accent-color:#c5a059; width:14px; height:14px; cursor:pointer;">
+                                <span class="text-white text-xs font-bold group-hover:text-[#c5a059] transition">تانية إعدادي</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer group">
+                                <input type="checkbox" class="grade-check" value="3-mid"
+                                       style="accent-color:#c5a059; width:14px; height:14px; cursor:pointer;">
+                                <span class="text-white text-xs font-bold group-hover:text-[#c5a059] transition">تالتة إعدادي</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer group">
+                                <input type="checkbox" class="grade-check" value="1-sec"
+                                       style="accent-color:#c5a059; width:14px; height:14px; cursor:pointer;">
+                                <span class="text-white text-xs font-bold group-hover:text-[#c5a059] transition">أولى ثانوي</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer group">
+                                <input type="checkbox" class="grade-check" value="2-sec"
+                                       style="accent-color:#c5a059; width:14px; height:14px; cursor:pointer;">
+                                <span class="text-white text-xs font-bold group-hover:text-[#c5a059] transition">تانية ثانوي</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer group">
+                                <input type="checkbox" class="grade-check" value="3-sec"
+                                       style="accent-color:#c5a059; width:14px; height:14px; cursor:pointer;">
+                                <span class="text-white text-xs font-bold group-hover:text-[#c5a059] transition">تالتة ثانوي</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <button id="add-user-btn" onclick="addUser()"
+                            class="w-full bg-blue-600 hover:bg-blue-500 text-white font-black p-3 rounded-xl transition shadow-lg shadow-blue-600/20 text-sm">
+                        إضافة الإيميل الآن +
+                    </button>
+                </div>
+
+                <!-- قائمة المستخدمين -->
+                <div class="bg-black/30 p-5 rounded-2xl border border-white/5">
+                    <label class="block text-gray-400 text-xs mb-3 text-right font-bold italic">قائمة المستخدمين:</label>
+                    <div id="admin-users-list" class="max-h-[380px] overflow-y-auto"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ====== ملف الطالب (Profile) ====== -->
+<div id="profile-modal" style="display:none"
+     class="fixed inset-0 z-[15000] bg-[#080c14]/95 backdrop-blur-lg flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-hidden">
+    <div class="profile-modal-box w-full sm:max-w-md bg-[#111827] border border-white/10 rounded-t-[32px] sm:rounded-[28px] p-6 relative">
+        <div class="w-10 h-1 bg-white/20 rounded-full mx-auto mb-5 sm:hidden"></div>
+
+        <button onclick="closeProfile()" class="absolute top-5 left-5 w-8 h-8 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full text-gray-400 hover:text-white transition flex items-center justify-center text-lg">×</button>
+
+        <div class="flex flex-col items-center mb-5">
+            <div class="relative mb-4">
+                <img id="profile-avatar" src="" referrerpolicy="no-referrer"
+                     class="w-20 h-20 rounded-[18px] border-2 border-[#c5a059] object-cover shadow-xl shadow-[#c5a059]/15">
+                <div class="absolute -bottom-2 -right-2 w-7 h-7 bg-[#c5a059] rounded-lg flex items-center justify-center shadow-lg">
+                    <i class="fas fa-atom text-black text-xs"></i>
+                </div>
+            </div>
+            <h2 id="profile-name" class="text-lg font-black text-white mb-1"></h2>
+            <p id="profile-email" class="text-gray-500 text-[10px] mb-2 font-mono"></p>
+            <span id="profile-role-badge" class="text-xs font-black px-3 py-1 rounded-full"></span>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 mb-4">
+            <div class="bg-black/30 rounded-2xl p-4 text-center border border-white/5">
+                <p class="text-[#c5a059] text-2xl font-black" id="profile-watched">0</p>
+                <p class="text-gray-400 text-[10px] font-bold mt-1">درس شاهدته</p>
+            </div>
+            <div class="bg-black/30 rounded-2xl p-4 text-center border border-white/5">
+                <p class="text-[#c5a059] text-sm font-black leading-tight" id="profile-grade-text">-</p>
+                <p class="text-gray-400 text-[10px] font-bold mt-1">صفك الدراسي</p>
+            </div>
+        </div>
+
+        <!-- تغيير الاسم -->
+        <div class="bg-black/30 rounded-2xl p-4 border border-white/5 mb-3">
+            <p class="text-gray-400 text-[11px] font-bold mb-2 flex items-center gap-2">
+                <i class="fas fa-pen text-[#c5a059]"></i> الاسم في التعليقات
+            </p>
+            <div class="flex gap-2">
+                <input id="profile-display-name-input" type="text" placeholder="اكتب اسمك المخصص..."
+                    class="flex-1 bg-white/5 border border-white/10 rounded-xl text-white text-sm p-2.5 outline-none focus:border-[#c5a059] font-bold"
+                    style="font-family:'Cairo',sans-serif;">
+                <button onclick="saveDisplayName()"
+                    class="btn-gold px-4 rounded-xl font-black text-xs flex-shrink-0">حفظ</button>
+            </div>
+        </div>
+
+        <!-- زرار تغيير الصف -->
+        <button id="profile-change-grade-btn" onclick="closeProfile(); openGradePicker();"
+                class="change-grade-btn w-full bg-white/5 hover:bg-white/10 border border-white/10 text-white font-black text-sm py-3 rounded-2xl transition flex items-center justify-center gap-2 mb-3">
+            <i class="fas fa-sync text-[#c5a059]"></i> تغيير الصف الدراسي
+        </button>
+
+        <button onclick="logout()"
+                class="w-full bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 font-black text-sm py-3 rounded-2xl transition flex items-center justify-center gap-2">
+            <i class="fas fa-power-off"></i> تسجيل الخروج
+        </button>
+    </div>
+</div>
+
+<!-- ====== مشغل المحتوى (فيديو + صور + تعليقات) ====== -->
+<div id="video-player-modal" style="display:none; position:fixed; inset:0; z-index:20000; background:rgba(5,8,15,0.98); overflow-y:auto; -webkit-overflow-scrolling:touch;" onclick="closePlayer()">
+    <div style="width:100%; max-width:1100px; margin:0 auto; padding:12px 12px 80px; display:flex; flex-direction:column; gap:14px; box-sizing:border-box;" onclick="event.stopPropagation()">
+
+        <!-- هيدر -->
+        <div style="display:flex; align-items:center; justify-content:space-between; padding-top:6px;">
+            <h3 id="video-title-display" style="color:white; font-family:'Cairo',sans-serif; font-weight:900; font-size:clamp(13px,3vw,18px); margin:0; flex:1; line-height:1.4; padding-left:10px;"></h3>
+            <button onclick="closePlayer()" style="background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.1); color:white; width:40px; height:40px; border-radius:50%; font-size:20px; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; transition:background 0.2s;" onmouseover="this.style.background='rgba(239,68,68,0.2)'" onmouseout="this.style.background='rgba(255,255,255,0.08)'">&times;</button>
+        </div>
+
+        <!-- الإطار (فيديو أو صورة) -->
+        <div class="video-container animate__animated animate__zoomIn" style="border-radius:16px; overflow:hidden;">
+            <iframe id="main-video-frame" src="" frameborder="0"
+                allow="autoplay; fullscreen; picture-in-picture;"
+                allowfullscreen webkitallowfullscreen mozallowfullscreen></iframe>
+        </div>
+
+        <!-- شريط التقييم -->
+        <div style="background:#0f172a; border:1px solid rgba(197,160,89,0.15); border-radius:16px; padding:14px 16px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+            <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                <div style="display:flex; flex-direction:column; gap:4px;">
+                    <span style="color:rgba(255,255,255,0.4); font-family:'Cairo',sans-serif; font-size:10px; font-weight:700;">قيّم هذا المحتوى</span>
+                    <div id="modal-stars" style="display:flex; gap:5px;">
+                        <i class="fas fa-star modal-star" data-val="1" style="font-size:22px; color:#374151; cursor:pointer; transition:all 0.15s;"></i>
+                        <i class="fas fa-star modal-star" data-val="2" style="font-size:22px; color:#374151; cursor:pointer; transition:all 0.15s;"></i>
+                        <i class="fas fa-star modal-star" data-val="3" style="font-size:22px; color:#374151; cursor:pointer; transition:all 0.15s;"></i>
+                        <i class="fas fa-star modal-star" data-val="4" style="font-size:22px; color:#374151; cursor:pointer; transition:all 0.15s;"></i>
+                        <i class="fas fa-star modal-star" data-val="5" style="font-size:22px; color:#374151; cursor:pointer; transition:all 0.15s;"></i>
+                    </div>
+                </div>
+                <div style="display:flex; align-items:center; gap:6px; background:rgba(197,160,89,0.1); border:1px solid rgba(197,160,89,0.25); border-radius:30px; padding:5px 12px;">
+                    <i class="fas fa-star" style="color:#c5a059; font-size:12px;"></i>
+                    <span id="modal-avg-val" style="color:#c5a059; font-weight:900; font-family:'Cairo',sans-serif; font-size:15px;">-</span>
+                    <span style="color:rgba(255,255,255,0.3); font-size:10px; font-family:'Cairo',sans-serif;">/ 5</span>
+                </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:10px;">
+                <div style="display:flex; align-items:center; gap:5px; color:rgba(255,255,255,0.4); font-family:'Cairo',sans-serif; font-size:11px;">
+                    <i class="fas fa-users" style="color:#c5a059;"></i>
+                    <span id="modal-raters-count">0</span>
+                    <span>قيّموا</span>
+                </div>
+                <button onclick="toggleRatingsPanel()" id="ratings-toggle-btn"
+                    style="background:rgba(197,160,89,0.25); border:1px solid rgba(197,160,89,0.2); color:#c5a059; border-radius:20px; padding:5px 12px; font-family:'Cairo',sans-serif; font-size:11px; font-weight:700; cursor:pointer; transition:all 0.2s;">
+                    <i class="fas fa-list-ul" style="margin-left:4px;"></i> إخفاء التفاصيل
+                </button>
+            </div>
+        </div>
+
+        <!-- لوحة تفاصيل التقييمات -->
+        <div id="ratings-panel" style="background:#0f172a; border:1px solid rgba(197,160,89,0.12); border-radius:16px; overflow:hidden;">
+            <div style="padding:12px 16px; border-bottom:1px solid rgba(255,255,255,0.06); display:flex; align-items:center; gap:8px;">
+                <i class="fas fa-star" style="color:#c5a059; font-size:13px;"></i>
+                <span style="color:white; font-family:'Cairo',sans-serif; font-weight:900; font-size:13px;">تقييمات المتعلمين</span>
+            </div>
+            <div id="ratings-details-list" style="max-height:200px; overflow-y:auto; padding:6px 0;">
+                <div style="text-align:center; padding:20px; color:rgba(255,255,255,0.25); font-family:'Cairo',sans-serif; font-size:12px;">
+                    لا توجد تقييمات بعد
+                </div>
+            </div>
+        </div>
+
+        <!-- قسم التعليقات -->
+        <div style="background:#0f172a; border:1px solid rgba(255,255,255,0.07); border-radius:16px; overflow:hidden;">
+            <div style="padding:13px 16px; border-bottom:1px solid rgba(255,255,255,0.06); display:flex; align-items:center; gap:8px;">
+                <i class="fas fa-comments" style="color:#c5a059;"></i>
+                <span style="color:white; font-family:'Cairo',sans-serif; font-weight:900; font-size:13px;">التعليقات</span>
+                <span id="comments-count" style="background:rgba(197,160,89,0.15); color:#c5a059; border-radius:30px; padding:1px 9px; font-size:11px; font-family:'Cairo',sans-serif; font-weight:700;">0</span>
+            </div>
+            <div style="padding:12px 14px; border-bottom:1px solid rgba(255,255,255,0.05); display:flex; gap:10px; align-items:flex-start;">
+                <img id="comment-my-avatar" src="" referrerpolicy="no-referrer"
+                     style="width:34px; height:34px; border-radius:10px; border:1px solid rgba(197,160,89,0.35); object-fit:cover; flex-shrink:0; margin-top:2px;"
+                     onerror="this.style.display='none'">
+                <div style="flex:1; display:flex; flex-direction:column; gap:8px;">
+                    <div id="reply-indicator" style="display:none; align-items:center; justify-content:space-between; background:rgba(197,160,89,0.08); border:1px solid rgba(197,160,89,0.2); border-radius:8px; padding:5px 10px;">
+                        <span style="color:#c5a059; font-family:'Cairo',sans-serif; font-size:11px; font-weight:700;">
+                            <i class="fas fa-reply" style="margin-left:4px;"></i> ردك على: <span id="reply-to-name"></span>
+                        </span>
+                        <button onclick="cancelReply()" style="background:none;border:none;color:rgba(255,255,255,0.4);cursor:pointer;font-size:14px;padding:0;">&times;</button>
+                    </div>
+                    <textarea id="comment-input" placeholder="شاركنا رأيك في المحتوى..." rows="2"
+                        style="width:100%; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.1); border-radius:12px; color:white; font-family:'Cairo',sans-serif; font-size:13px; padding:10px 12px; outline:none; resize:none; box-sizing:border-box; transition:border-color 0.2s; direction:rtl;"
+                        onfocus="this.style.borderColor='#c5a059'" onblur="this.style.borderColor='rgba(255,255,255,0.1)'"></textarea>
+                    <div style="display:flex; justify-content:flex-end;">
+                        <button onclick="submitComment()"
+                            style="background:linear-gradient(135deg,#c5a059,#edd3a1); color:#080c14; border:none; border-radius:10px; padding:8px 20px; font-family:'Cairo',sans-serif; font-weight:900; font-size:12px; cursor:pointer; display:flex; align-items:center; gap:6px;">
+                            نشر <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div id="comments-list" style="min-height:80px; max-height:350px; overflow-y:auto; padding:4px 0; scroll-behavior:smooth;">
+                <div style="text-align:center; padding:24px; color:rgba(255,255,255,0.2); font-family:'Cairo',sans-serif; font-size:12px;">
+                    <i class="fas fa-comment-dots" style="font-size:24px; margin-bottom:8px; display:block; opacity:0.4;"></i>
+                    لا توجد تعليقات بعد، كن أول من يعلّق!
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ====== المحتوى الرئيسي ====== -->
+<main id="app-content" class="hidden container mx-auto px-4 py-6 md:px-6 md:py-12">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-6 border-r-8 border-[#c5a059] pr-6">
+        <h3 id="grade-title" class="text-lg md:text-3xl font-black">المحاضرات</h3>
+        <div class="relative w-full md:w-80">
+            <span class="absolute inset-y-0 right-0 flex items-center pr-4">
+                <i class="fas fa-search text-[#c5a059]"></i>
+            </span>
+            <input type="text" id="search-input" onkeyup="filterVideos()"
+                placeholder="ابحث عن درس معين..."
+                class="w-full bg-white/5 border border-white/10 text-white text-sm rounded-2xl py-3 pr-12 pl-4 outline-none focus:border-[#c5a059] transition-all">
+        </div>
+    </div>
+
+    <!-- ====== تابز عرض المحتوى ====== -->
+    <div class="flex gap-2 mb-6 p-1 bg-black/40 rounded-2xl border border-white/5">
+        <button onclick="switchContentTab('all')" id="tab-all"
+                class="content-tab-btn active flex-1 py-2.5 rounded-xl font-black text-xs md:text-sm">
+            📋 الكل
+        </button>
+        <button onclick="switchContentTab('video')" id="tab-video"
+                class="content-tab-btn flex-1 py-2.5 rounded-xl font-black text-xs md:text-sm">
+            🎥 محاضرات
+        </button>
+        <button onclick="switchContentTab('image')" id="tab-image"
+                class="content-tab-btn flex-1 py-2.5 rounded-xl font-black text-xs md:text-sm">
+            🖼️ صور
+        </button>
+    </div>
+
+    <div id="lesson-grid"></div>
+</main>
+
+<script src="firebase-config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="app.js"></script>
 </body>
 </html>
