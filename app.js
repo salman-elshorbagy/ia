@@ -164,18 +164,11 @@ auth.onAuthStateChanged(async (user) => {
 function updateUserProfile(user) {
     const avatarImg = document.getElementById('user-avatar');
     if (avatarImg) {
+        // referrerPolicy فقط — بدون crossOrigin لأن Google Photos تفشل معه
+        // photoURL من Google هو أفاتار المزوّد الفعلي (ملوّن أو مخصص)
         avatarImg.referrerPolicy = "no-referrer";
-        avatarImg.crossOrigin = "anonymous";
-        const fallback = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName||user.email)}&background=1e293b&color=c5a059&size=80&bold=true`;
-        if (user.photoURL) {
-            avatarImg.src = user.photoURL;
-            avatarImg.onerror = function() {
-                this.src = fallback;
-                this.onerror = null;
-            };
-        } else {
-            avatarImg.src = fallback;
-        }
+        avatarImg.src = user.photoURL || '';
+        avatarImg.onerror = function() { this.onerror = null; this.src = ''; };
     }
     const nameSpan = document.getElementById('user-first-name');
     if (nameSpan && user.displayName) {
@@ -493,11 +486,23 @@ function createCard(item, type) {
         }
     }
 
-    // تحميل عدد التعليقات (للفيديو والصورة)
+    // تحميل عدد التعليقات (للفيديو والصورة) — يشمل التعليقات والردود
     const commentsEl = card.querySelector('.comments-count');
     if (commentsEl) {
-        db.collection('comments').doc(lessonId).collection('messages').get().then(snap => {
-            commentsEl.innerText = snap.size > 0 ? snap.size : '0';
+        db.collection('comments').doc(lessonId).collection('messages').get().then(async snap => {
+            let total = snap.size;
+            // جمع الردود من كل تعليق بالتوازي
+            const replyCounts = await Promise.all(
+                snap.docs.map(d =>
+                    db.collection('comments').doc(lessonId)
+                      .collection('messages').doc(d.id)
+                      .collection('replies').get()
+                      .then(r => r.size)
+                      .catch(() => 0)
+                )
+            );
+            total += replyCounts.reduce((a, b) => a + b, 0);
+            commentsEl.innerText = total;
         }).catch(() => {});
     }
 
@@ -826,7 +831,6 @@ function loadUsersList() {
 
             const userName = data.displayName || data.googleName || '';
             const userAvatar = data.photoURL || '';
-            const avatarFallback = `https://ui-avatars.com/api/?name=${encodeURIComponent(userName||targetEmail)}&background=1e293b&color=c5a059&size=60&bold=true`;
 
             let badgeText = isTargetMaster ? "👑 مشرف عام" : "🎓 طالب";
             let badgeStyle = isTargetMaster
@@ -856,7 +860,7 @@ function loadUsersList() {
             <div style="display:flex; align-items:center; gap:10px; padding:9px 10px; background:rgba(255,255,255,0.04); border-radius:10px; border:1px solid ${isTargetSelf ? 'rgba(197,160,89,0.2)' : 'rgba(255,255,255,0.05)'}; margin-bottom:5px;">
                 <img src="${userAvatar}" referrerpolicy="no-referrer"
                      style="width:36px;height:36px;border-radius:10px;object-fit:cover;flex-shrink:0;border:1px solid rgba(197,160,89,0.2);"
-                     onerror="this.src='${avatarFallback}'">
+                     onerror="this.onerror=null;this.src=''">
                 <div style="flex:1; min-width:0; overflow:hidden;">
                     ${userName ? `<p style="color:${isTargetSelf?'#c5a059':'white'};font-size:11px;font-weight:900;margin:0 0 1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${userName} ${isTargetSelf?'<span style="color:#c5a059;font-size:9px;">· أنت</span>':''}</p>` : ''}
                     <p style="color:rgba(255,255,255,0.35); font-size:9px; margin:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; direction:ltr; text-align:right;">${doc.id}</p>
@@ -953,7 +957,11 @@ function playVideo(url, lessonId, title) {
     const user = auth.currentUser;
     if (user) {
         const avatarEl = document.getElementById('comment-my-avatar');
-        if (avatarEl) avatarEl.src = user.photoURL || '';
+        if (avatarEl) {
+            avatarEl.referrerPolicy = "no-referrer";
+            avatarEl.src = user.photoURL || '';
+            avatarEl.onerror = function() { this.onerror = null; this.src = ''; };
+        }
     }
 
     // فتح لوحة التقييمات تلقائياً
@@ -991,10 +999,14 @@ function openImageViewer(url, lessonId, title) {
 
     document.getElementById('video-title-display').innerText = '🖼️ ' + (title || '');
 
-    const user = auth.currentUser;
-    if (user) {
+    const userImg = auth.currentUser;
+    if (userImg) {
         const avatarEl = document.getElementById('comment-my-avatar');
-        if (avatarEl) avatarEl.src = user.photoURL || '';
+        if (avatarEl) {
+            avatarEl.referrerPolicy = "no-referrer";
+            avatarEl.src = userImg.photoURL || '';
+            avatarEl.onerror = function() { this.onerror = null; this.src = ''; };
+        }
     }
 
     // فتح لوحة التقييمات تلقائياً
@@ -1038,6 +1050,7 @@ function closePlayer() {
         commentsUnsubscribe();
         commentsUnsubscribe = null;
     }
+    _repliesCache = {};
 
     if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock();
     unlockBodyScroll();
@@ -1070,7 +1083,12 @@ async function openProfile() {
     const user = auth.currentUser;
     if (!user) return;
 
-    document.getElementById('profile-avatar').src = user.photoURL || '';
+    const profileAvatar = document.getElementById('profile-avatar');
+    if (profileAvatar) {
+        profileAvatar.referrerPolicy = "no-referrer";
+        profileAvatar.src = user.photoURL || '';
+        profileAvatar.onerror = function() { this.onerror = null; this.src = ''; };
+    }
     document.getElementById('profile-email').innerText = user.email || '';
     document.getElementById('profile-grade-text').innerText = gradeMap[s_grade] || '-';
 
@@ -1216,7 +1234,7 @@ async function getMyDisplayName() {
     const user = auth.currentUser;
     if (!user) return '';
     const doc = await db.collection('users_access').doc(user.email.toLowerCase()).get();
-    return doc.data()?.displayName || user.displayName || user.email.split('@')[0];
+    return doc.data()?.displayName || doc.data()?.googleName || user.displayName || user.email;
 }
 
 async function saveDisplayName() {
@@ -1283,13 +1301,11 @@ async function loadRatingsDetails(lessonId) {
         let avatarUrl = ratingUsers[email]?.avatar || '';
         if (!name) {
             const userDoc = await db.collection('users_access').doc(email).get();
-            name = userDoc.data()?.displayName || email.split('@')[0];
+            name = userDoc.data()?.displayName || userDoc.data()?.googleName || email;
         }
-        const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=1e293b&color=c5a059&size=60&bold=true`;
         const stars = Array.from({length: 5}, (_, i) =>
             `<i class="fas fa-star" style="font-size:11px; color:${i < rating ? '#c5a059' : '#374151'};"></i>`
         ).join('');
-        // المشرف يستطيع الضغط على اسم المقيّم لرؤية بروفايله
         const nameClickAttr = currentUserRole === 'master'
             ? `onclick="viewUserProfile('${email}','${name.replace(/'/g,"\\'")}','${avatarUrl.replace(/'/g,"\\'")}');" style="cursor:pointer; color:white; font-family:'Cairo',sans-serif; font-size:12px; font-weight:700; text-decoration:underline dotted rgba(197,160,89,0.4);"`
             : `style="color:white; font-family:'Cairo',sans-serif; font-size:12px; font-weight:700;"`;
@@ -1297,7 +1313,7 @@ async function loadRatingsDetails(lessonId) {
         <div style="display:flex; align-items:center; gap:10px; padding:10px 14px; border-bottom:1px solid rgba(255,255,255,0.04);">
             <img src="${avatarUrl}" referrerpolicy="no-referrer"
                  style="width:34px; height:34px; border-radius:9px; object-fit:cover; flex-shrink:0; border:1px solid rgba(197,160,89,0.2); ${currentUserRole==='master'?'cursor:pointer;':''}"
-                 onerror="this.src='${fallbackAvatar}'"
+                 onerror="this.onerror=null;this.src=''"
                  ${currentUserRole==='master' ? `onclick="viewUserProfile('${email}','${name.replace(/'/g,"\\'")}','${avatarUrl.replace(/'/g,"\\'")}');"` : ''}>
             <div style="flex:1;">
                 <p ${nameClickAttr} style="margin:0 0 3px;">${name}</p>
@@ -1385,11 +1401,15 @@ let replyingTo = null;
 // كل مرة بنطلب render جديد، رقم الإصدار بيزيد
 // الـ render القديم لو اتأخر مش هيحدث الـ DOM عشان رقمه بقى قديم
 let commentsRenderVersion = 0;
+// كاش الردود لكل تعليق — يُخزّن مصفوفة HTML strings لكل commentId
+let _repliesCache = {};
+const REPLIES_PAGE_SIZE = 10;
 
 function listenComments(lessonId) {
     if (commentsUnsubscribe) commentsUnsubscribe();
-    // إعادة ضبط العداد لما بنبدأ listener جديد
+    // إعادة ضبط العداد والكاش لما بنبدأ listener جديد
     commentsRenderVersion = 0;
+    _repliesCache = {};
 
     commentsUnsubscribe = db.collection('comments').doc(lessonId)
         .collection('messages')
@@ -1436,13 +1456,14 @@ async function doRenderComments(lessonId, snap) {
                 ? `<span style="background:rgba(239,68,68,0.1);color:#ef4444;font-size:9px;padding:1px 5px;border-radius:10px;font-family:Cairo,sans-serif;" title="${d.email}">👁</span>`
                 : '';
 
-            // جلب الردود
+            // جلب الردود وبناء مصفوفة HTML (بدل string واحد)
             const repliesSnap = await db.collection('comments').doc(lessonId)
                 .collection('messages').doc(doc.id)
                 .collection('replies').orderBy('createdAt','asc').get();
             totalCount += repliesSnap.size;
 
-            let repliesHtml = '';
+            // بناء مصفوفة HTML لكل رد على حدة وتخزينها في الكاش
+            const repliesArr = [];
             repliesSnap.forEach(rDoc => {
                 const r = rDoc.data();
                 const rTime = r.createdAt ? formatTimeAgo(r.createdAt.toDate()) : '';
@@ -1452,7 +1473,6 @@ async function doRenderComments(lessonId, snap) {
                     ? `onclick="viewUserProfile('${r.email}','${(r.displayName||'').replace(/'/g,"\\'")}','${(r.avatar||'').replace(/'/g,"\\'")}');" style="cursor:pointer;"`
                     : '';
 
-                // صندوق الاقتباس — يظهر لو الرد يستهدف شخصاً معيناً
                 const quoteBox = (r.replyToName && r.replyToText)
                     ? `<div style="
                             border-right: 3px solid #c5a059;
@@ -1472,15 +1492,14 @@ async function doRenderComments(lessonId, snap) {
                        </div>`
                     : '';
 
-                // زرار الرد على الرد (يستهدف نفس التعليق الأب)
                 const escapedRName = (r.displayName||'').replace(/'/g,"\\'").replace(/"/g,'&quot;');
                 const escapedRText = (r.text||'').replace(/'/g,"\\'").replace(/"/g,'&quot;').substring(0,80);
-                repliesHtml += `
+                repliesArr.push(`
                 <div style="display:flex;gap:8px;padding:9px 0 9px 0;border-top:1px solid rgba(255,255,255,0.04);margin-top:4px;">
                     <div style="width:2px;background:rgba(197,160,89,0.35);border-radius:2px;flex-shrink:0;margin:0 4px;"></div>
                     <img src="${r.avatar||''}" referrerpolicy="no-referrer"
                          style="width:28px;height:28px;border-radius:8px;object-fit:cover;flex-shrink:0;border:1px solid rgba(255,255,255,0.08);margin-top:2px;"
-                         onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(r.displayName||'U')}&background=1e293b&color=c5a059&size=50'">
+                         onerror="this.onerror=null;this.src=''">
                     <div style="flex:1;min-width:0;">
                         <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;flex-wrap:wrap;">
                             <span ${rNameClick} style="color:${rIsMe?'#c5a059':'rgba(255,255,255,0.9)'};font-family:'Cairo',sans-serif;font-weight:900;font-size:11px;">${r.displayName||'مجهول'}</span>
@@ -1495,8 +1514,29 @@ async function doRenderComments(lessonId, snap) {
                         </button>
                     </div>
                     ${rCanDelete ? `<button onclick="deleteReply('${lessonId}','${doc.id}','${rDoc.id}')" style="background:none;border:none;color:rgba(239,68,68,0.4);cursor:pointer;font-size:11px;padding:0 2px;flex-shrink:0;align-self:flex-start;margin-top:2px;"><i class="fas fa-trash-alt"></i></button>` : ''}
-                </div>`;
+                </div>`);
             });
+
+            // تخزين في الكاش
+            _repliesCache[doc.id] = repliesArr;
+            const repliesCount = repliesArr.length;
+
+            // بناء منطقة الردود (زرار التبديل + الحاوية المخفية)
+            const repliesToggleHtml = repliesCount > 0 ? `
+                <div style="margin-top:6px;">
+                    <button id="replies-toggle-btn-${doc.id}" onclick="toggleReplies('${doc.id}')"
+                        style="background:rgba(197,160,89,0.08);border:1px solid rgba(197,160,89,0.2);color:rgba(197,160,89,0.8);border-radius:20px;padding:3px 10px;font-family:'Cairo',sans-serif;font-size:10px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:4px;transition:all 0.2s;"
+                        onmouseover="this.style.background='rgba(197,160,89,0.15)'" onmouseout="this.style.background='rgba(197,160,89,0.08)'">
+                        <i class="fas fa-comment-dots" style="font-size:9px;"></i>
+                        عرض ${repliesCount} ${repliesCount === 1 ? 'رد' : 'ردود'} ↓
+                    </button>
+                    <div id="replies-container-${doc.id}" style="display:none;margin-top:6px;padding-right:4px;"></div>
+                    <button id="replies-more-btn-${doc.id}" onclick="showMoreReplies('${doc.id}')"
+                        style="display:none;margin-top:6px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:rgba(255,255,255,0.5);border-radius:20px;padding:4px 14px;font-family:'Cairo',sans-serif;font-size:10px;font-weight:700;cursor:pointer;transition:all 0.2s;"
+                        onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'">
+                        <i class="fas fa-ellipsis-h" style="font-size:9px;margin-left:4px;"></i> عرض المزيد
+                    </button>
+                </div>` : '';
 
             // زرار الرد على التعليق الأصلي
             const escapedDName = (d.displayName||'').replace(/'/g,"\\'").replace(/"/g,'&quot;');
@@ -1507,7 +1547,7 @@ async function doRenderComments(lessonId, snap) {
                 <div style="display:flex;gap:10px;padding:12px 14px;${isMe?'background:rgba(197,160,89,0.03);':''}">
                     <img src="${d.avatar||''}" referrerpolicy="no-referrer"
                          style="width:32px;height:32px;border-radius:10px;object-fit:cover;flex-shrink:0;border:1px solid rgba(255,255,255,0.1);margin-top:1px;"
-                         onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(d.displayName||'U')}&background=1e293b&color=c5a059&size=60'">
+                         onerror="this.onerror=null;this.src=''">
                     <div style="flex:1;min-width:0;">
                         <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap;">
                             <span ${nameClickable} style="color:${isMe?'#c5a059':'white'};font-family:'Cairo',sans-serif;font-weight:900;font-size:12px;">${d.displayName||'مجهول'}</span>
@@ -1520,7 +1560,7 @@ async function doRenderComments(lessonId, snap) {
                             style="background:none;border:none;color:rgba(197,160,89,0.6);font-family:'Cairo',sans-serif;font-size:11px;font-weight:700;cursor:pointer;padding:0;display:flex;align-items:center;gap:4px;">
                             <i class="fas fa-reply" style="font-size:10px;"></i> رد
                         </button>
-                        ${repliesHtml ? `<div style="margin-top:8px;padding-right:4px;">${repliesHtml}</div>` : ''}
+                        ${repliesToggleHtml}
                     </div>
                     ${canDelete ? `<button onclick="deleteComment('${lessonId}','${doc.id}')" style="background:none;border:none;color:rgba(239,68,68,0.4);cursor:pointer;font-size:12px;padding:0 2px;flex-shrink:0;align-self:flex-start;"><i class="fas fa-trash-alt"></i></button>` : ''}
                 </div>
@@ -1550,6 +1590,80 @@ async function forceReloadComments(lessonId) {
         await doRenderComments(lessonId, snap);
     } catch(e) {
         console.error('Force reload error:', e);
+    }
+}
+
+// ============================================
+//  تبديل إظهار/إخفاء الردود
+// ============================================
+function toggleReplies(commentId) {
+    const container = document.getElementById(`replies-container-${commentId}`);
+    const btn = document.getElementById(`replies-toggle-btn-${commentId}`);
+    const moreBtn = document.getElementById(`replies-more-btn-${commentId}`);
+    if (!container || !btn) return;
+
+    const isHidden = container.style.display === 'none' || container.style.display === '';
+    const replies = _repliesCache[commentId] || [];
+    const total = replies.length;
+
+    if (isHidden) {
+        // عرض الصفحة الأولى
+        const firstPage = replies.slice(0, REPLIES_PAGE_SIZE);
+        container.innerHTML = firstPage.join('');
+        container.style.display = 'block';
+
+        btn.innerHTML = '<i class="fas fa-chevron-up" style="font-size:9px;"></i> إخفاء الردود ↑';
+        btn.style.background = 'rgba(197,160,89,0.15)';
+
+        // زرار "عرض المزيد"
+        if (moreBtn) {
+            if (total > REPLIES_PAGE_SIZE) {
+                moreBtn.dataset.offset = REPLIES_PAGE_SIZE;
+                moreBtn.innerHTML = `<i class="fas fa-ellipsis-h" style="font-size:9px;margin-left:4px;"></i> عرض المزيد (${total - REPLIES_PAGE_SIZE} متبقي)`;
+                moreBtn.style.display = 'inline-flex';
+            } else {
+                moreBtn.style.display = 'none';
+            }
+        }
+    } else {
+        // إخفاء الردود
+        container.style.display = 'none';
+        container.innerHTML = '';
+
+        btn.innerHTML = `<i class="fas fa-comment-dots" style="font-size:9px;"></i> عرض ${total} ${total === 1 ? 'رد' : 'ردود'} ↓`;
+        btn.style.background = 'rgba(197,160,89,0.08)';
+
+        if (moreBtn) moreBtn.style.display = 'none';
+    }
+}
+
+// ============================================
+//  عرض المزيد من الردود
+// ============================================
+function showMoreReplies(commentId) {
+    const container = document.getElementById(`replies-container-${commentId}`);
+    const moreBtn = document.getElementById(`replies-more-btn-${commentId}`);
+    if (!container || !moreBtn) return;
+
+    const replies = _repliesCache[commentId] || [];
+    const currentOffset = parseInt(moreBtn.dataset.offset || '0');
+    const nextPage = replies.slice(currentOffset, currentOffset + REPLIES_PAGE_SIZE);
+
+    // إضافة الردود الجديدة بعد الموجودين
+    nextPage.forEach(html => {
+        const tmp = document.createElement('div');
+        tmp.innerHTML = html;
+        while (tmp.firstChild) container.appendChild(tmp.firstChild);
+    });
+
+    const newOffset = currentOffset + REPLIES_PAGE_SIZE;
+    moreBtn.dataset.offset = newOffset;
+
+    const remaining = replies.length - newOffset;
+    if (remaining <= 0) {
+        moreBtn.style.display = 'none';
+    } else {
+        moreBtn.innerHTML = `<i class="fas fa-ellipsis-h" style="font-size:9px;margin-left:4px;"></i> عرض المزيد (${remaining} متبقي)`;
     }
 }
 
@@ -1651,7 +1765,8 @@ async function viewUserProfile(email, displayName, avatar) {
     const watchedDoc = await db.collection('watched').doc(email.toLowerCase()).get();
     const allWatched = watchedDoc.data()?.lessons || [];
     const watchedSet = new Set(allWatched);
-    const avatarUrl = avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=1e293b&color=c5a059&size=100&bold=true`;
+    // نستخدم photoURL المخزّن أو الممرّر — أفاتار المزوّد الفعلي
+    const avatarUrl = avatar || data.photoURL || '';
 
     const gradesToShow = role === 'master'
         ? ['1-mid','2-mid','3-mid','1-sec','2-sec','3-sec']
@@ -1690,7 +1805,7 @@ async function viewUserProfile(email, displayName, avatar) {
         <div style="font-family:'Cairo',sans-serif;direction:rtl;text-align:right;max-height:70vh;overflow-y:auto;">
             <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;">
                 <img src="${avatarUrl}" referrerpolicy="no-referrer" style="width:56px;height:56px;border-radius:14px;border:2px solid #c5a059;object-fit:cover;flex-shrink:0;"
-                     onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=1e293b&color=c5a059&size=100'">
+                     onerror="this.onerror=null;this.src=''">
                 <div style="min-width:0;">
                     <p style="margin:0;color:white;font-weight:900;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${name}</p>
                     <p style="margin:3px 0 0;color:rgba(255,255,255,0.4);font-size:10px;overflow:hidden;text-overflow:ellipsis;">${email}</p>
@@ -1780,10 +1895,10 @@ function renderStudentsList(students, watchedMap) {
 
     let html = '';
     students.forEach(s => {
-        // الاسم: displayName المخصص أو googleName أو الجزء قبل @
-        const name = s.displayName || s.googleName || s.email.split('@')[0];
-        // الصورة الحقيقية من Google أو ui-avatars كـ fallback
-        const avatarUrl = s.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=1e293b&color=c5a059&size=80&bold=true`;
+        // الاسم: displayName المخصص أو googleName أو الإيميل كاملاً (لا نقطع عند @)
+        const name = s.displayName || s.googleName || s.email;
+        // الصورة الحقيقية من Google — بدون توليد أفاتار مخصص
+        const avatarUrl = s.photoURL || '';
         const count = watchedMap?.[s.email] ?? 0;
         const gradeNames = (s.allowedGrades || []).map(g => ({
             '1-mid':'إعدادي١','2-mid':'إعدادي٢','3-mid':'إعدادي٣',
@@ -1800,7 +1915,7 @@ function renderStudentsList(students, watchedMap) {
              data-name="${name.toLowerCase()}" data-email="${s.email.toLowerCase()}">
             <img src="${avatarUrl}" referrerpolicy="no-referrer"
                  style="width:40px;height:40px;border-radius:11px;object-fit:cover;border:1px solid rgba(197,160,89,0.25);flex-shrink:0;"
-                 onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=1e293b&color=c5a059&size=80&bold=true'">
+                 onerror="this.onerror=null;this.src=''">
             <div style="flex:1;min-width:0;">
                 <p style="color:white;font-family:'Cairo',sans-serif;font-size:12px;font-weight:900;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${name}</p>
                 <p style="color:rgba(255,255,255,0.3);font-family:'Cairo',sans-serif;font-size:9px;margin:2px 0 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:ltr;text-align:right;">${s.email}</p>
@@ -1844,10 +1959,9 @@ async function showStudentWatchedDetails(email, name, avatar) {
         ]);
 
         const userData = userDoc.data() || {};
-        const resolvedName = userData.displayName || userData.googleName || name || email.split('@')[0];
-        const resolvedAvatar = userData.photoURL || avatar ||
-            `https://ui-avatars.com/api/?name=${encodeURIComponent(resolvedName)}&background=1e293b&color=c5a059&size=100&bold=true`;
-        const fallback = `https://ui-avatars.com/api/?name=${encodeURIComponent(resolvedName)}&background=1e293b&color=c5a059&size=100&bold=true`;
+        const resolvedName = userData.displayName || userData.googleName || name || email;
+        // نستخدم photoURL المخزّن — أفاتار المزوّد الفعلي بدون توليد بديل
+        const resolvedAvatar = userData.photoURL || avatar || '';
 
         const watchedIds = new Set(watchedDoc.data()?.lessons || []);
         const allowedGrades = userData.role === 'master'
@@ -1882,7 +1996,7 @@ async function showStudentWatchedDetails(email, name, avatar) {
             <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
                 <img src="${resolvedAvatar}" referrerpolicy="no-referrer"
                      style="width:50px;height:50px;border-radius:13px;border:2px solid #c5a059;object-fit:cover;flex-shrink:0;"
-                     onerror="this.src='${fallback}'">
+                     onerror="this.onerror=null;this.src=''">
                 <div style="min-width:0;flex:1;">
                     <p style="margin:0;color:white;font-weight:900;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${resolvedName}</p>
                     <p style="margin:2px 0;color:rgba(255,255,255,0.3);font-size:9px;overflow:hidden;text-overflow:ellipsis;direction:ltr;text-align:right;">${email}</p>
