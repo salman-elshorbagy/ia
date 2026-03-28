@@ -11,6 +11,8 @@ let usersDataMap = new Map();
 
 // بيانات الدروس المحملة في الذاكرة
 let allLessonsData = { videos: [], images: [] };
+// الدروس اللي شافها الطالب
+let watchedLessons = new Set();
 // التاب الحالي في الصفحة الرئيسية
 let currentContentTab = 'all';
 // الصف الحالي في لوحة الأدمن
@@ -79,6 +81,13 @@ auth.onAuthStateChanged(async (user) => {
             document.getElementById('app-content').classList.remove('hidden');
 
             updateUserProfile(user);
+            await loadWatchedLessons();
+
+            // ======= حفظ صورة Google ومعلومات المستخدم للاستخدام في لوحة المتابعة =======
+            db.collection("users_access").doc(userEmail).set({
+                photoURL: user.photoURL || '',
+                googleName: user.displayName || ''
+            }, { merge: true }).catch(() => {});
 
             // ضبط زرار لوحة المدرس - فقط للمشرف العام
             const adminBtn = document.querySelector('button[onclick="checkAdmin()"]');
@@ -154,9 +163,19 @@ auth.onAuthStateChanged(async (user) => {
 // ============================================
 function updateUserProfile(user) {
     const avatarImg = document.getElementById('user-avatar');
-    if (avatarImg && user.photoURL) {
+    if (avatarImg) {
         avatarImg.referrerPolicy = "no-referrer";
-        avatarImg.src = user.photoURL;
+        avatarImg.crossOrigin = "anonymous";
+        const fallback = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName||user.email)}&background=1e293b&color=c5a059&size=80&bold=true`;
+        if (user.photoURL) {
+            avatarImg.src = user.photoURL;
+            avatarImg.onerror = function() {
+                this.src = fallback;
+                this.onerror = null;
+            };
+        } else {
+            avatarImg.src = fallback;
+        }
     }
     const nameSpan = document.getElementById('user-first-name');
     if (nameSpan && user.displayName) {
@@ -165,8 +184,19 @@ function updateUserProfile(user) {
 }
 
 // ============================================
-//  تسجيل الدخول والخروج
+//  تحميل الدروس المشاهدة
 // ============================================
+async function loadWatchedLessons() {
+    const user = auth.currentUser;
+    if (!user) return;
+    try {
+        const doc = await db.collection('watched').doc(user.email.toLowerCase()).get();
+        const lessons = doc.data()?.lessons || [];
+        watchedLessons = new Set(lessons);
+    } catch(e) {}
+}
+
+
 async function login() {
     try {
         const p = new firebase.auth.GoogleAuthProvider();
@@ -414,24 +444,18 @@ function createCard(item, type) {
 
     const card = document.createElement('div');
     card.className = 'lesson-card animate__animated animate__fadeIn';
+    card.dataset.lessonId = lessonId;
+    if (watchedLessons.has(lessonId)) card.classList.add('card-watched');
 
     const overlayIcon = isVideo
         ? '<div class="play-icon-overlay"><i class="fas fa-play"></i></div>'
         : '<div class="image-icon-overlay"><i class="fas fa-expand-alt"></i></div>';
 
-    const ratersBadge = isVideo ? `
-        <div class="card-raters">
-            <i class="fas fa-star" style="color:#c5a059; font-size:9px;"></i>
-            <span class="raters-count">-</span>
-        </div>` : '';
-
     const btnText = isVideo
         ? 'مشاهدة المحاضرة <i class="fas fa-play-circle mr-1"></i>'
         : 'فتح الصورة <i class="fas fa-expand mr-1"></i>';
 
-    const timeBadge = timeText
-        ? `<span class="card-time-badge">${timeText}</span>`
-        : '';
+    const isWatched = watchedLessons.has(lessonId);
 
     card.innerHTML = `
         <div class="card-media-box">
@@ -441,10 +465,20 @@ function createCard(item, type) {
                 ${overlayIcon}
             </div>
         </div>
-        <div class="card-info" style="padding:8px; display:flex; flex-direction:column; gap:4px;">
+        <div class="card-info" style="padding:7px 8px; display:flex; flex-direction:column; gap:5px;">
             <h4 class="lesson-name font-black text-white text-center">${item.title}</h4>
-            ${timeBadge}
-            ${ratersBadge}
+            <div style="display:flex; align-items:center; justify-content:center; gap:5px; flex-wrap:wrap;">
+                ${isWatched ? '<span class="watched-mini"><i class="fas fa-check-circle"></i> شاهدته</span>' : ''}
+                ${timeText ? `<span class="card-time-badge">${timeText}</span>` : ''}
+                ${isVideo ? `<span style="display:flex;align-items:center;gap:2px;background:rgba(197,160,89,0.1);border-radius:20px;padding:2px 6px;">
+                    <i class="fas fa-star" style="color:#c5a059;font-size:8px;"></i>
+                    <span class="raters-count" style="color:rgba(255,255,255,0.5);font-family:'Cairo',sans-serif;font-size:9px;font-weight:700;">-</span>
+                </span>` : ''}
+                <span style="display:flex;align-items:center;gap:2px;background:rgba(100,116,139,0.15);border-radius:20px;padding:2px 6px;">
+                    <i class="fas fa-comment" style="color:#64748b;font-size:8px;"></i>
+                    <span class="comments-count" style="color:rgba(255,255,255,0.4);font-family:'Cairo',sans-serif;font-size:9px;font-weight:700;">0</span>
+                </span>
+            </div>
             <button class="play-btn btn-gold w-full py-2 rounded-lg text-xs font-black">${btnText}</button>
         </div>`;
 
@@ -454,9 +488,20 @@ function createCard(item, type) {
         if (ratersEl) {
             db.collection('ratings').doc(lessonId).get().then(snap => {
                 const count = Object.keys(snap.data()?.ratings || {}).length;
-                ratersEl.innerText = count > 0 ? `${count} قيّم` : 'لم يُقيَّم بعد';
+                ratersEl.innerText = count > 0 ? count : '-';
             }).catch(() => {});
         }
+    }
+
+    // تحميل عدد التعليقات (للفيديو والصورة)
+    const commentsEl = card.querySelector('.comments-count');
+    if (commentsEl) {
+        db.collection('comments').doc(lessonId).collection('messages').get().then(snap => {
+            commentsEl.innerText = snap.size > 0 ? snap.size : '0';
+        }).catch(() => {});
+    }
+
+    if (isVideo) {
         card.onclick = () => {
             playVideo(item.url, lessonId, item.title);
             markWatched(lessonId);
@@ -669,21 +714,23 @@ function closeAdmin() {
 }
 
 function switchTab(tabName) {
-    const lessonsSection = document.getElementById('section-lessons');
-    const usersSection = document.getElementById('section-users');
-    const lessonsBtn = document.getElementById('btn-tab-lessons');
-    const usersBtn = document.getElementById('btn-tab-users');
-    lessonsBtn.classList.remove('active');
-    usersBtn.classList.remove('active');
-    if (tabName === 'lessons') {
-        lessonsSection.classList.remove('hidden');
-        usersSection.classList.add('hidden');
-        lessonsBtn.classList.add('active');
-    } else {
-        usersSection.classList.remove('hidden');
-        lessonsSection.classList.add('hidden');
-        usersBtn.classList.add('active');
-    }
+    const sections = {
+        lessons: document.getElementById('section-lessons'),
+        users:   document.getElementById('section-users'),
+        students:document.getElementById('section-students')
+    };
+    const btns = {
+        lessons: document.getElementById('btn-tab-lessons'),
+        users:   document.getElementById('btn-tab-users'),
+        students:document.getElementById('btn-tab-students')
+    };
+
+    Object.keys(sections).forEach(k => {
+        if (sections[k]) sections[k].classList.toggle('hidden', k !== tabName);
+        if (btns[k])     btns[k].classList.toggle('active', k === tabName);
+    });
+
+    if (tabName === 'students') loadStudentsMonitor();
 }
 
 function prepareEditLesson(id, title, url, grade, type) {
@@ -777,6 +824,10 @@ function loadUsersList() {
 
             usersDataMap.set(targetEmail, data);
 
+            const userName = data.displayName || data.googleName || '';
+            const userAvatar = data.photoURL || '';
+            const avatarFallback = `https://ui-avatars.com/api/?name=${encodeURIComponent(userName||targetEmail)}&background=1e293b&color=c5a059&size=60&bold=true`;
+
             let badgeText = isTargetMaster ? "👑 مشرف عام" : "🎓 طالب";
             let badgeStyle = isTargetMaster
                 ? "color:#ff9068; font-size:9px; font-weight:700;"
@@ -802,12 +853,16 @@ function loadUsersList() {
                 </button>` : '';
 
             h += `
-            <div style="display:flex; align-items:center; gap:8px; padding:8px 10px; background:rgba(255,255,255,0.04); border-radius:10px; border:1px solid ${isTargetSelf ? 'rgba(197,160,89,0.2)' : 'rgba(255,255,255,0.05)'}; margin-bottom:5px;">
+            <div style="display:flex; align-items:center; gap:10px; padding:9px 10px; background:rgba(255,255,255,0.04); border-radius:10px; border:1px solid ${isTargetSelf ? 'rgba(197,160,89,0.2)' : 'rgba(255,255,255,0.05)'}; margin-bottom:5px;">
+                <img src="${userAvatar}" referrerpolicy="no-referrer"
+                     style="width:36px;height:36px;border-radius:10px;object-fit:cover;flex-shrink:0;border:1px solid rgba(197,160,89,0.2);"
+                     onerror="this.src='${avatarFallback}'">
                 <div style="flex:1; min-width:0; overflow:hidden;">
-                    <p style="color:${isTargetSelf ? '#c5a059' : 'white'}; font-size:10px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin:0; direction:ltr; text-align:right;">${doc.id}</p>
+                    ${userName ? `<p style="color:${isTargetSelf?'#c5a059':'white'};font-size:11px;font-weight:900;margin:0 0 1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${userName} ${isTargetSelf?'<span style="color:#c5a059;font-size:9px;">· أنت</span>':''}</p>` : ''}
+                    <p style="color:rgba(255,255,255,0.35); font-size:9px; margin:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; direction:ltr; text-align:right;">${doc.id}</p>
                     <div style="display:flex; align-items:center; gap:4px; margin-top:2px; flex-wrap:wrap;">
                         <span style="${badgeStyle}">${badgeText}</span>
-                        ${isTargetSelf ? '<span style="color:#c5a059; font-size:9px; font-weight:700;">· أنت</span>' : ''}
+                        ${!userName && isTargetSelf ? '<span style="color:#c5a059; font-size:9px; font-weight:700;">· أنت</span>' : ''}
                         ${gradeNames ? `<span style="color:rgba(255,255,255,0.25); font-size:8px;">· ${gradeNames}</span>` : ''}
                     </div>
                 </div>
@@ -1036,7 +1091,6 @@ async function openProfile() {
         badge.style.cssText = 'background:rgba(59,130,246,0.15);color:#60a5fa;border:1px solid rgba(59,130,246,0.3);padding:4px 14px;border-radius:30px;font-size:11px;font-weight:900;';
     }
 
-    // ====== إخفاء/إظهار زرار تغيير الصف في البروفايل ======
     const changeGradeInProfile = document.getElementById('profile-change-grade-btn');
     if (changeGradeInProfile) {
         const canChange = (role === 'master') || (currentUserAllowedGrades.length > 1);
@@ -1044,7 +1098,80 @@ async function openProfile() {
     }
 
     const watchedDoc = await db.collection('watched').doc(user.email.toLowerCase()).get();
-    document.getElementById('profile-watched').innerText = (watchedDoc.data()?.lessons || []).length;
+    const allWatched = watchedDoc.data()?.lessons || [];
+    const watchedSet = new Set(allWatched);
+    document.getElementById('profile-watched').innerText = allWatched.length;
+
+    // ====== Progress Bars لكل صف ======
+    const gradesContainer = document.getElementById('profile-grades-progress');
+    if (gradesContainer) {
+        const gradesToShow = (role === 'master')
+            ? ['1-mid','2-mid','3-mid','1-sec','2-sec','3-sec']
+            : data.allowedGrades || [];
+
+        if (gradesToShow.length > 0) {
+            gradesContainer.innerHTML = `<div style="background:#0f172a;border:1px solid rgba(197,160,89,0.12);border-radius:16px;overflow:hidden;margin-bottom:12px;">
+                <div style="padding:10px 14px;border-bottom:1px solid rgba(255,255,255,0.05);display:flex;align-items:center;gap:7px;">
+                    <i class="fas fa-chart-line" style="color:#c5a059;font-size:12px;"></i>
+                    <span style="color:white;font-family:'Cairo',sans-serif;font-weight:900;font-size:13px;">تقدمك الدراسي</span>
+                </div>
+                <div id="grade-progress-items" style="padding:14px;display:flex;flex-direction:column;gap:12px;">
+                    <div style="text-align:center;color:rgba(255,255,255,0.3);font-family:'Cairo',sans-serif;font-size:11px;">
+                        <i class="fas fa-spinner fa-spin"></i> جاري التحميل...
+                    </div>
+                </div>
+            </div>`;
+
+            // جلب بيانات كل صف بالتوازي
+            const gradeDataPromises = gradesToShow.map(async grade => {
+                const snap = await db.collection('lessons').where('grade','==',grade).get();
+                const total = snap.size;
+                const watched = snap.docs.filter(d => watchedSet.has(d.id)).length;
+                return { grade, total, watched };
+            });
+
+            const gradeResults = await Promise.all(gradeDataPromises);
+
+            let itemsHtml = '';
+            gradeResults.forEach(({ grade, total, watched }, idx) => {
+                const pct = total > 0 ? Math.round((watched / total) * 100) : 0;
+                const isActive = grade === s_grade;
+                const isDone = pct === 100 && total > 0;
+                const barColor = isDone ? '#22c55e' : (pct > 60 ? '#c5a059' : '#c5a059');
+
+                itemsHtml += `
+                <div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                        <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+                            <span style="color:${isActive?'#c5a059':'rgba(255,255,255,0.8)'};font-family:'Cairo',sans-serif;font-size:12px;font-weight:${isActive?'900':'700'};">${gradeMap[grade]}</span>
+                            ${isActive ? '<span style="background:rgba(197,160,89,0.15);color:#c5a059;font-size:8px;padding:1px 7px;border-radius:10px;font-family:Cairo,sans-serif;font-weight:700;">الحالي</span>' : ''}
+                            ${isDone ? '<span style="background:rgba(34,197,94,0.15);color:#22c55e;font-size:8px;padding:1px 7px;border-radius:10px;font-family:Cairo,sans-serif;font-weight:700;">✅ مكتمل</span>' : ''}
+                        </div>
+                        <span style="color:rgba(255,255,255,0.45);font-family:'Cairo',sans-serif;font-size:11px;">${watched} / ${total}</span>
+                    </div>
+                    <div style="background:rgba(255,255,255,0.08);border-radius:20px;height:9px;overflow:hidden;position:relative;">
+                        <div class="grade-prog-bar" style="height:100%;width:0%;background:${isDone?'linear-gradient(90deg,#22c55e,#4ade80)':'linear-gradient(90deg,#c5a059,#edd3a1)'};border-radius:20px;transition:width 0.7s ease;" data-target="${pct}"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;margin-top:3px;">
+                        <span style="color:${isDone?'#22c55e':'#c5a059'};font-family:'Cairo',sans-serif;font-size:10px;font-weight:700;">${pct}%</span>
+                        ${total === 0 ? '<span style="color:rgba(255,255,255,0.2);font-family:Cairo,sans-serif;font-size:9px;">لا يوجد محتوى بعد</span>' : ''}
+                    </div>
+                </div>`;
+            });
+
+            const itemsContainer = gradesContainer.querySelector('#grade-progress-items');
+            if (itemsContainer) itemsContainer.innerHTML = itemsHtml;
+
+            // تحريك شريط التقدم
+            setTimeout(() => {
+                gradesContainer.querySelectorAll('.grade-prog-bar').forEach(bar => {
+                    bar.style.width = (bar.dataset.target || '0') + '%';
+                });
+            }, 150);
+        } else {
+            gradesContainer.innerHTML = '';
+        }
+    }
 
     document.getElementById('profile-modal').style.display = 'flex';
     lockBodyScroll();
@@ -1058,6 +1185,28 @@ function closeProfile() {
 async function markWatched(lessonId) {
     const user = auth.currentUser;
     if (!user || !lessonId) return;
+
+    // تحديث فوري للـ Set والـ UI
+    if (!watchedLessons.has(lessonId)) {
+        watchedLessons.add(lessonId);
+        const card = document.querySelector(`[data-lesson-id="${lessonId}"]`);
+        if (card) {
+            card.classList.add('card-watched');
+            const cardInfo = card.querySelector('.card-info');
+            if (cardInfo && !cardInfo.querySelector('.watched-mini')) {
+                const mini = document.createElement('span');
+                mini.className = 'watched-mini';
+                mini.innerHTML = '<i class="fas fa-check-circle"></i> شاهدته';
+                const lessonName = cardInfo.querySelector('.lesson-name');
+                if (lessonName && lessonName.nextSibling) {
+                    cardInfo.insertBefore(mini, lessonName.nextSibling);
+                } else {
+                    cardInfo.appendChild(mini);
+                }
+            }
+        }
+    }
+
     await db.collection('watched').doc(user.email.toLowerCase()).set({
         lessons: firebase.firestore.FieldValue.arrayUnion(lessonId)
     }, { merge: true }).catch(() => {});
@@ -1500,36 +1649,335 @@ async function viewUserProfile(email, displayName, avatar) {
     const name = data.displayName || displayName || email.split('@')[0];
     const roleLabels = { master:'👑 مشرف عام', student:'🎓 طالب' };
     const watchedDoc = await db.collection('watched').doc(email.toLowerCase()).get();
-    const watchedCount = (watchedDoc.data()?.lessons || []).length;
-    const grade = gradeMap[data.lastGrade] || '-';
+    const allWatched = watchedDoc.data()?.lessons || [];
+    const watchedSet = new Set(allWatched);
     const avatarUrl = avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=1e293b&color=c5a059&size=100&bold=true`;
+
+    const gradesToShow = role === 'master'
+        ? ['1-mid','2-mid','3-mid','1-sec','2-sec','3-sec']
+        : (data.allowedGrades || []);
+
+    // جلب بيانات الصفوف بالتوازي
+    const gradeResults = await Promise.all(gradesToShow.map(async grade => {
+        const snap = await db.collection('lessons').where('grade','==',grade).get();
+        const total = snap.size;
+        const watched = snap.docs.filter(d => watchedSet.has(d.id)).length;
+        return { grade, total, watched };
+    }));
+
+    let progressHtml = '';
+    gradeResults.forEach(({ grade, total, watched }) => {
+        const pct = total > 0 ? Math.round((watched / total) * 100) : 0;
+        const isDone = pct === 100 && total > 0;
+        progressHtml += `
+        <div style="margin-bottom:10px;">
+            <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                <div style="display:flex;align-items:center;gap:5px;">
+                    <span style="color:rgba(255,255,255,0.8);font-family:'Cairo',sans-serif;font-size:11px;font-weight:700;">${gradeMap[grade]}</span>
+                    ${isDone ? '<span style="color:#22c55e;font-size:9px;">✅</span>' : ''}
+                </div>
+                <span style="color:rgba(255,255,255,0.4);font-family:'Cairo',sans-serif;font-size:10px;">${watched}/${total}</span>
+            </div>
+            <div style="background:rgba(255,255,255,0.08);border-radius:20px;height:7px;overflow:hidden;">
+                <div style="height:100%;width:${pct}%;background:${isDone?'#22c55e':'#c5a059'};border-radius:20px;"></div>
+            </div>
+            <span style="color:${isDone?'#22c55e':'#c5a059'};font-family:'Cairo',sans-serif;font-size:9px;font-weight:700;">${pct}%</span>
+        </div>`;
+    });
+
     await Swal.fire({
         html: `
-        <div style="font-family:'Cairo',sans-serif;direction:rtl;text-align:right;">
+        <div style="font-family:'Cairo',sans-serif;direction:rtl;text-align:right;max-height:70vh;overflow-y:auto;">
             <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;">
-                <img src="${avatarUrl}" referrerpolicy="no-referrer" style="width:60px;height:60px;border-radius:14px;border:2px solid #c5a059;object-fit:cover;" onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=1e293b&color=c5a059&size=100'">
-                <div>
-                    <p style="margin:0;color:white;font-weight:900;font-size:15px;">${name}</p>
-                    <p style="margin:3px 0 0;color:rgba(255,255,255,0.4);font-size:11px;">${email}</p>
+                <img src="${avatarUrl}" referrerpolicy="no-referrer" style="width:56px;height:56px;border-radius:14px;border:2px solid #c5a059;object-fit:cover;flex-shrink:0;"
+                     onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=1e293b&color=c5a059&size=100'">
+                <div style="min-width:0;">
+                    <p style="margin:0;color:white;font-weight:900;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${name}</p>
+                    <p style="margin:3px 0 0;color:rgba(255,255,255,0.4);font-size:10px;overflow:hidden;text-overflow:ellipsis;">${email}</p>
                     <span style="font-size:11px;color:#c5a059;font-weight:700;">${roleLabels[role]||role}</span>
                 </div>
             </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
                 <div style="background:rgba(255,255,255,0.05);border-radius:12px;padding:12px;text-align:center;">
-                    <p style="color:#c5a059;font-size:20px;font-weight:900;margin:0;">${watchedCount}</p>
-                    <p style="color:rgba(255,255,255,0.4);font-size:11px;margin:4px 0 0;">درس شاهده</p>
+                    <p style="color:#c5a059;font-size:22px;font-weight:900;margin:0;">${allWatched.length}</p>
+                    <p style="color:rgba(255,255,255,0.4);font-size:10px;margin:4px 0 0;">درس شاهده</p>
                 </div>
                 <div style="background:rgba(255,255,255,0.05);border-radius:12px;padding:12px;text-align:center;">
-                    <p style="color:#c5a059;font-size:13px;font-weight:900;margin:0;">${grade}</p>
-                    <p style="color:rgba(255,255,255,0.4);font-size:11px;margin:4px 0 0;">الصف الدراسي</p>
+                    <p style="color:#c5a059;font-size:13px;font-weight:900;margin:0;">${gradeMap[data.lastGrade] || '-'}</p>
+                    <p style="color:rgba(255,255,255,0.4);font-size:10px;margin:4px 0 0;">آخر صف</p>
                 </div>
             </div>
+            ${gradesToShow.length > 0 ? `
+            <div style="background:#0f172a;border:1px solid rgba(197,160,89,0.12);border-radius:14px;padding:14px;margin-bottom:4px;">
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:12px;">
+                    <i class="fas fa-chart-line" style="color:#c5a059;font-size:11px;"></i>
+                    <span style="color:white;font-family:'Cairo',sans-serif;font-weight:900;font-size:12px;">الإنجازات الدراسية</span>
+                </div>
+                ${progressHtml}
+            </div>` : ''}
         </div>`,
         background: '#111827',
         color: '#fff',
         showConfirmButton: false,
         showCloseButton: true,
         heightAuto: false,
+    });
+}
+
+// ============================================
+//  متابعة الطلاب - تبويب المشرف العام 📊
+// ============================================
+let studentsDataCache = [];
+// بيانات مؤقتة لنافذة دروس الطالب
+let _swWatchedItems = { all: [], videos: [], images: [] };
+
+async function loadStudentsMonitor() {
+    const container = document.getElementById('students-monitor-list');
+    const badge = document.getElementById('students-count-badge');
+    if (!container) return;
+
+    container.innerHTML = `<div style="text-align:center;padding:30px;color:rgba(255,255,255,0.3);font-family:'Cairo',sans-serif;font-size:13px;">
+        <i class="fas fa-spinner fa-spin" style="font-size:20px;margin-bottom:8px;display:block;"></i> جاري التحميل...
+    </div>`;
+
+    const snap = await db.collection('users_access').get();
+    const students = [];
+    snap.forEach(doc => {
+        const d = doc.data();
+        if (d.role !== 'master') {
+            students.push({ email: doc.id, ...d });
+        }
+    });
+
+    if (badge) badge.innerText = students.length;
+    studentsDataCache = students;
+
+    if (students.length === 0) {
+        container.innerHTML = `<div style="text-align:center;padding:30px;color:rgba(255,255,255,0.3);font-family:'Cairo',sans-serif;font-size:13px;">لا يوجد طلاب مسجلون</div>`;
+        return;
+    }
+
+    // جلب عدد المشاهدات لكل طالب
+    const watchedPromises = students.map(s =>
+        db.collection('watched').doc(s.email).get()
+            .then(d => ({ email: s.email, count: (d.data()?.lessons || []).length }))
+            .catch(() => ({ email: s.email, count: 0 }))
+    );
+    const watchedResults = await Promise.all(watchedPromises);
+    const watchedMap = Object.fromEntries(watchedResults.map(r => [r.email, r.count]));
+
+    renderStudentsList(students, watchedMap);
+}
+
+function renderStudentsList(students, watchedMap) {
+    const container = document.getElementById('students-monitor-list');
+    if (!container) return;
+
+    if (students.length === 0) {
+        container.innerHTML = `<div style="text-align:center;padding:20px;color:rgba(255,255,255,0.3);font-family:'Cairo',sans-serif;font-size:12px;">لا توجد نتائج</div>`;
+        return;
+    }
+
+    let html = '';
+    students.forEach(s => {
+        // الاسم: displayName المخصص أو googleName أو الجزء قبل @
+        const name = s.displayName || s.googleName || s.email.split('@')[0];
+        // الصورة الحقيقية من Google أو ui-avatars كـ fallback
+        const avatarUrl = s.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=1e293b&color=c5a059&size=80&bold=true`;
+        const count = watchedMap?.[s.email] ?? 0;
+        const gradeNames = (s.allowedGrades || []).map(g => ({
+            '1-mid':'إعدادي١','2-mid':'إعدادي٢','3-mid':'إعدادي٣',
+            '1-sec':'ثانوي١','2-sec':'ثانوي٢','3-sec':'ثانوي٣'
+        }[g] || g)).join(' · ');
+        const safeName = name.replace(/'/g, "\\'");
+        const safeAvatar = avatarUrl.replace(/'/g, "\\'");
+
+        html += `
+        <div onclick="showStudentWatchedDetails('${s.email}','${safeName}','${safeAvatar}')"
+             style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;cursor:pointer;transition:all 0.2s;"
+             onmouseover="this.style.borderColor='rgba(197,160,89,0.3)';this.style.background='rgba(197,160,89,0.04)'"
+             onmouseout="this.style.borderColor='rgba(255,255,255,0.06)';this.style.background='rgba(255,255,255,0.03)'"
+             data-name="${name.toLowerCase()}" data-email="${s.email.toLowerCase()}">
+            <img src="${avatarUrl}" referrerpolicy="no-referrer"
+                 style="width:40px;height:40px;border-radius:11px;object-fit:cover;border:1px solid rgba(197,160,89,0.25);flex-shrink:0;"
+                 onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=1e293b&color=c5a059&size=80&bold=true'">
+            <div style="flex:1;min-width:0;">
+                <p style="color:white;font-family:'Cairo',sans-serif;font-size:12px;font-weight:900;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${name}</p>
+                <p style="color:rgba(255,255,255,0.3);font-family:'Cairo',sans-serif;font-size:9px;margin:2px 0 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:ltr;text-align:right;">${s.email}</p>
+                ${gradeNames ? `<p style="color:rgba(197,160,89,0.7);font-family:'Cairo',sans-serif;font-size:9px;font-weight:700;margin:2px 0 0;">${gradeNames}</p>` : ''}
+            </div>
+            <div style="text-align:center;flex-shrink:0;min-width:36px;">
+                <p style="color:#c5a059;font-family:'Cairo',sans-serif;font-size:17px;font-weight:900;margin:0;line-height:1;">${count}</p>
+                <p style="color:rgba(255,255,255,0.25);font-family:'Cairo',sans-serif;font-size:8px;margin:2px 0 0;">درس</p>
+            </div>
+            <i class="fas fa-chevron-left" style="color:rgba(255,255,255,0.15);font-size:10px;flex-shrink:0;"></i>
+        </div>`;
+    });
+    container.innerHTML = html;
+}
+
+// ============================================
+//  نافذة تفاصيل دروس الطالب المشاهدة
+// ============================================
+async function showStudentWatchedDetails(email, name, avatar) {
+    if (currentUserRole !== 'master') return;
+
+    // نافذة تحميل أولاً
+    Swal.fire({
+        html: `<div style="font-family:'Cairo',sans-serif;direction:rtl;text-align:center;padding:20px;">
+            <i class="fas fa-spinner fa-spin" style="color:#c5a059;font-size:24px;"></i>
+            <p style="color:rgba(255,255,255,0.4);font-size:12px;margin-top:10px;">جاري تحميل بيانات الطالب...</p>
+        </div>`,
+        background: '#111827',
+        color: '#fff',
+        showConfirmButton: false,
+        showCloseButton: true,
+        heightAuto: false,
+        allowOutsideClick: true,
+    });
+
+    try {
+        const [userDoc, watchedDoc, allLessonsSnap] = await Promise.all([
+            db.collection('users_access').doc(email.toLowerCase()).get(),
+            db.collection('watched').doc(email.toLowerCase()).get(),
+            db.collection('lessons').get()
+        ]);
+
+        const userData = userDoc.data() || {};
+        const resolvedName = userData.displayName || userData.googleName || name || email.split('@')[0];
+        const resolvedAvatar = userData.photoURL || avatar ||
+            `https://ui-avatars.com/api/?name=${encodeURIComponent(resolvedName)}&background=1e293b&color=c5a059&size=100&bold=true`;
+        const fallback = `https://ui-avatars.com/api/?name=${encodeURIComponent(resolvedName)}&background=1e293b&color=c5a059&size=100&bold=true`;
+
+        const watchedIds = new Set(watchedDoc.data()?.lessons || []);
+        const allowedGrades = userData.role === 'master'
+            ? null // المشرف يرى كل شيء
+            : (userData.allowedGrades || []);
+
+        // فهرس الدروس
+        const lessonsMap = {};
+        allLessonsSnap.forEach(d => { lessonsMap[d.id] = { ...d.data(), _id: d.id }; });
+
+        const allWatched = [], watchedVideos = [], watchedImages = [];
+        watchedIds.forEach(id => {
+            const lesson = lessonsMap[id];
+            if (!lesson) return;
+            // فلترة بالصفوف المسموح بها الحالية للطالب فقط
+            if (allowedGrades && !allowedGrades.includes(lesson.grade)) return;
+            allWatched.push(lesson);
+            if (lesson.type === 'image') watchedImages.push(lesson);
+            else watchedVideos.push(lesson);
+        });
+
+        _swWatchedItems = { all: allWatched, videos: watchedVideos, images: watchedImages };
+
+        const gradeNames = (userData.allowedGrades || []).map(g => ({
+            '1-mid':'إعدادي١','2-mid':'إعدادي٢','3-mid':'إعدادي٣',
+            '1-sec':'ثانوي١','2-sec':'ثانوي٢','3-sec':'ثانوي٣'
+        }[g] || g)).join(' · ');
+
+        const html = `
+        <div style="font-family:'Cairo',sans-serif;direction:rtl;text-align:right;">
+            <!-- رأس: صورة + معلومات -->
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
+                <img src="${resolvedAvatar}" referrerpolicy="no-referrer"
+                     style="width:50px;height:50px;border-radius:13px;border:2px solid #c5a059;object-fit:cover;flex-shrink:0;"
+                     onerror="this.src='${fallback}'">
+                <div style="min-width:0;flex:1;">
+                    <p style="margin:0;color:white;font-weight:900;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${resolvedName}</p>
+                    <p style="margin:2px 0;color:rgba(255,255,255,0.3);font-size:9px;overflow:hidden;text-overflow:ellipsis;direction:ltr;text-align:right;">${email}</p>
+                    ${gradeNames ? `<p style="margin:2px 0;color:rgba(197,160,89,0.8);font-size:9px;font-weight:700;">${gradeNames}</p>` : ''}
+                </div>
+            </div>
+            <!-- إحصائيات ثلاثية -->
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:12px;">
+                <div style="background:rgba(255,255,255,0.05);border-radius:11px;padding:9px 5px;text-align:center;">
+                    <p style="color:#c5a059;font-size:18px;font-weight:900;margin:0;line-height:1;">${allWatched.length}</p>
+                    <p style="color:rgba(255,255,255,0.3);font-size:8px;margin:3px 0 0;">الكل</p>
+                </div>
+                <div style="background:rgba(255,255,255,0.05);border-radius:11px;padding:9px 5px;text-align:center;">
+                    <p style="color:#c5a059;font-size:18px;font-weight:900;margin:0;line-height:1;">${watchedVideos.length}</p>
+                    <p style="color:rgba(255,255,255,0.3);font-size:8px;margin:3px 0 0;">🎥 محاضرة</p>
+                </div>
+                <div style="background:rgba(255,255,255,0.05);border-radius:11px;padding:9px 5px;text-align:center;">
+                    <p style="color:#c5a059;font-size:18px;font-weight:900;margin:0;line-height:1;">${watchedImages.length}</p>
+                    <p style="color:rgba(255,255,255,0.3);font-size:8px;margin:3px 0 0;">🖼️ صورة</p>
+                </div>
+            </div>
+            <!-- تبويبات -->
+            <div style="display:flex;gap:4px;background:rgba(0,0,0,0.4);border-radius:11px;padding:4px;margin-bottom:10px;">
+                <button id="sw-tab-all" onclick="swSetTab('all')"
+                    style="flex:1;padding:7px 3px;border-radius:8px;border:none;cursor:pointer;font-family:'Cairo',sans-serif;font-size:10px;font-weight:900;transition:all 0.2s;background:#c5a059;color:#080c14;">
+                    الكل (${allWatched.length})
+                </button>
+                <button id="sw-tab-video" onclick="swSetTab('video')"
+                    style="flex:1;padding:7px 3px;border-radius:8px;border:none;cursor:pointer;font-family:'Cairo',sans-serif;font-size:10px;font-weight:700;transition:all 0.2s;background:transparent;color:rgba(255,255,255,0.45);">
+                    🎥 (${watchedVideos.length})
+                </button>
+                <button id="sw-tab-image" onclick="swSetTab('image')"
+                    style="flex:1;padding:7px 3px;border-radius:8px;border:none;cursor:pointer;font-family:'Cairo',sans-serif;font-size:10px;font-weight:700;transition:all 0.2s;background:transparent;color:rgba(255,255,255,0.45);">
+                    🖼️ (${watchedImages.length})
+                </button>
+            </div>
+            <!-- قائمة الدروس -->
+            <div id="sw-lessons-list"
+                 style="max-height:210px;overflow-y:auto;background:#0f172a;border:1px solid rgba(255,255,255,0.06);border-radius:12px;">
+            </div>
+        </div>`;
+
+        Swal.update({ html, showCloseButton: true, showConfirmButton: false });
+        swSetTab('all');
+
+    } catch (e) {
+        console.error('showStudentWatchedDetails error:', e);
+        Swal.update({
+            html: `<div style="font-family:'Cairo',sans-serif;color:rgba(255,255,255,0.4);text-align:center;padding:20px;">حدث خطأ في تحميل البيانات</div>`,
+            showCloseButton: true, showConfirmButton: false,
+        });
+    }
+}
+
+// تبديل تبويب دروس الطالب داخل SweetAlert2
+function swSetTab(tab) {
+    ['all', 'video', 'image'].forEach(t => {
+        const btn = document.getElementById(`sw-tab-${t}`);
+        if (!btn) return;
+        if (t === tab) { btn.style.background = '#c5a059'; btn.style.color = '#080c14'; }
+        else { btn.style.background = 'transparent'; btn.style.color = 'rgba(255,255,255,0.45)'; }
+    });
+
+    const list = document.getElementById('sw-lessons-list');
+    if (!list) return;
+
+    const items = tab === 'video' ? _swWatchedItems.videos
+                : tab === 'image' ? _swWatchedItems.images
+                : _swWatchedItems.all;
+
+    if (items.length === 0) {
+        list.innerHTML = `<div style="text-align:center;padding:22px;color:rgba(255,255,255,0.2);font-family:'Cairo',sans-serif;font-size:11px;">
+            <i class="fas fa-${tab === 'image' ? 'image' : 'play-circle'}" style="font-size:18px;display:block;margin-bottom:7px;opacity:0.3;"></i>
+            لم يشاهد أي محتوى من هذا القسم بعد
+        </div>`;
+        return;
+    }
+
+    list.innerHTML = items.map((item, idx) => `
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;${idx < items.length - 1 ? 'border-bottom:1px solid rgba(255,255,255,0.04);' : ''}">
+            <span style="font-size:11px;flex-shrink:0;">${item.type === 'image' ? '🖼️' : '🎥'}</span>
+            <p style="color:rgba(255,255,255,0.82);font-family:'Cairo',sans-serif;font-size:11px;font-weight:700;margin:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${item.title}</p>
+            <span style="color:rgba(255,255,255,0.18);font-family:'Cairo',sans-serif;font-size:8px;white-space:nowrap;flex-shrink:0;">${gradeMap[item.grade] || ''}</span>
+        </div>
+    `).join('');
+}
+
+
+function filterStudentsList() {
+    const query = document.getElementById('students-search')?.value?.toLowerCase() || '';
+    const items = document.querySelectorAll('#students-monitor-list [data-name]');
+    items.forEach(item => {
+        const name = item.dataset.name || '';
+        const email = item.dataset.email || '';
+        item.style.display = (name.includes(query) || email.includes(query)) ? '' : 'none';
     });
 }
 

@@ -303,6 +303,32 @@ body {
     color: rgba(255,255,255,0.3);
 }
 
+/* =========================================
+   شارة "شاهدته" مصغّرة تحت عنوان الدرس
+   ========================================= */
+.watched-mini {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    font-family: 'Cairo', sans-serif;
+    font-size: 8px;
+    font-weight: 700;
+    color: rgba(34, 197, 94, 0.75);
+    text-align: center;
+    line-height: 1;
+}
+.watched-mini i {
+    font-size: 8px;
+    color: rgba(34, 197, 94, 0.85);
+}
+@media (max-width: 480px) {
+    .watched-mini { font-size: 7px; }
+}
+
+.card-watched .card-media-box { border-bottom: 2px solid rgba(16, 185, 129, 0.35); }
+.card-watched { border-color: rgba(16, 185, 129, 0.2) !important; }
+
 /* زرار المشاهدة */
 .play-btn {
     font-family: 'Cairo', sans-serif;
@@ -357,6 +383,28 @@ body {
 @media (min-width: 640px) {
     .profile-modal-box {
         animation: popIn 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+}
+
+/* ضمان عدم أكل زر الإغلاق للبروفايل على الموبايل */
+#profile-modal {
+    align-items: flex-end;
+}
+@media (min-width: 640px) {
+    #profile-modal { align-items: center; }
+}
+
+/* لوحة الإدارة - ارتفاع مناسب للموبايل */
+@media (max-width: 768px) {
+    #admin-modal {
+        align-items: flex-end !important;
+        padding: 0 !important;
+    }
+    .admin-box {
+        border-radius: 28px 28px 0 0 !important;
+        max-height: 92vh !important;
+        max-height: 92dvh !important;
+        overflow-y: auto !important;
     }
 }
 
