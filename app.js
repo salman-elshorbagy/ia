@@ -1140,13 +1140,18 @@ async function loadRatingsDetails(lessonId) {
         const stars = Array.from({length: 5}, (_, i) =>
             `<i class="fas fa-star" style="font-size:11px; color:${i < rating ? '#c5a059' : '#374151'};"></i>`
         ).join('');
+        // المشرف يستطيع الضغط على اسم المقيّم لرؤية بروفايله
+        const nameClickAttr = currentUserRole === 'master'
+            ? `onclick="viewUserProfile('${email}','${name.replace(/'/g,"\\'")}','${avatarUrl.replace(/'/g,"\\'")}');" style="cursor:pointer; color:white; font-family:'Cairo',sans-serif; font-size:12px; font-weight:700; text-decoration:underline dotted rgba(197,160,89,0.4);"`
+            : `style="color:white; font-family:'Cairo',sans-serif; font-size:12px; font-weight:700;"`;
         html += `
         <div style="display:flex; align-items:center; gap:10px; padding:10px 14px; border-bottom:1px solid rgba(255,255,255,0.04);">
             <img src="${avatarUrl}" referrerpolicy="no-referrer"
-                 style="width:34px; height:34px; border-radius:9px; object-fit:cover; flex-shrink:0; border:1px solid rgba(197,160,89,0.2);"
-                 onerror="this.src='${fallbackAvatar}'">
+                 style="width:34px; height:34px; border-radius:9px; object-fit:cover; flex-shrink:0; border:1px solid rgba(197,160,89,0.2); ${currentUserRole==='master'?'cursor:pointer;':''}"
+                 onerror="this.src='${fallbackAvatar}'"
+                 ${currentUserRole==='master' ? `onclick="viewUserProfile('${email}','${name.replace(/'/g,"\\'")}','${avatarUrl.replace(/'/g,"\\'")}');"` : ''}>
             <div style="flex:1;">
-                <p style="margin:0 0 3px; color:white; font-family:'Cairo',sans-serif; font-size:12px; font-weight:700;">${name}</p>
+                <p ${nameClickAttr} style="margin:0 0 3px;">${name}</p>
                 <div style="display:flex; gap:2px;">${stars}</div>
             </div>
             <div style="text-align:center;">
@@ -1227,89 +1232,147 @@ async function submitModalRating(lessonId, val) {
 // ============================================
 let replyingTo = null;
 
+// قفل منع التزامن في الرسم (يمنع اختفاء التعليقات)
+let commentsRenderLock = false;
+let commentsPendingSnap = null;
+
 function listenComments(lessonId) {
     if (commentsUnsubscribe) commentsUnsubscribe();
-    const list = document.getElementById('comments-list');
-    const countEl = document.getElementById('comments-count');
+    commentsRenderLock = false;
+    commentsPendingSnap = null;
+
+    const handleSnap = async (snap) => {
+        // لو في عملية رسم جارية، احفظ أحدث snapshot وانتظر
+        if (commentsRenderLock) {
+            commentsPendingSnap = { lessonId, snap };
+            return;
+        }
+        await doRenderComments(lessonId, snap);
+    };
+
     commentsUnsubscribe = db.collection('comments').doc(lessonId)
         .collection('messages')
         .orderBy('createdAt', 'asc')
-        .onSnapshot(async snap => {
-            if (snap.empty) {
-                list.innerHTML = `<div style="text-align:center;padding:24px;color:rgba(255,255,255,0.2);font-family:'Cairo',sans-serif;font-size:12px;">
-                    <i class="fas fa-comment-dots" style="font-size:24px;margin-bottom:8px;display:block;opacity:0.4;"></i>
-                    لا توجد تعليقات بعد، كن أول من يعلّق!
-                </div>`;
-                countEl.innerText = '0';
-                return;
-            }
-            countEl.innerText = snap.size;
-            const isMaster = currentUserRole === 'master';
-            const myEmail = auth.currentUser?.email?.toLowerCase() || '';
-            let totalCount = snap.size;
-            let html = '';
-            for (const doc of snap.docs) {
-                const d = doc.data();
-                const timeAgo = d.createdAt ? formatTimeAgo(d.createdAt.toDate()) : '';
-                const isMe = d.email === myEmail;
-                const canDelete = isMe || isMaster;
-                const nameClickable = isMaster ? `onclick="viewUserProfile('${d.email}','${(d.displayName||'').replace(/'/g,"\\'")}','${d.avatar || ''}')" style="cursor:pointer;"` : '';
-                const masterBadge = isMaster && !isMe ? `<span style="background:rgba(239,68,68,0.1);color:#ef4444;font-size:9px;padding:1px 5px;border-radius:10px;font-family:Cairo,sans-serif;" title="${d.email}">👁</span>` : '';
-                const repliesSnap = await db.collection('comments').doc(lessonId)
-                    .collection('messages').doc(doc.id)
-                    .collection('replies').orderBy('createdAt','asc').get();
-                totalCount += repliesSnap.size;
-                let repliesHtml = '';
-                repliesSnap.forEach(rDoc => {
-                    const r = rDoc.data();
-                    const rTime = r.createdAt ? formatTimeAgo(r.createdAt.toDate()) : '';
-                    const rIsMe = r.email === myEmail;
-                    const rCanDelete = rIsMe || isMaster;
-                    const rNameClick = isMaster ? `onclick="viewUserProfile('${r.email}','${(r.displayName||'').replace(/'/g,"\\'")}','${r.avatar || ''}')" style="cursor:pointer;"` : '';
-                    repliesHtml += `
-                    <div style="display:flex;gap:8px;padding:8px 12px 8px 0;border-top:1px solid rgba(255,255,255,0.04);margin-top:4px;">
-                        <div style="width:2px;background:rgba(197,160,89,0.3);border-radius:2px;flex-shrink:0;margin-right:4px;"></div>
-                        <img src="${r.avatar||''}" referrerpolicy="no-referrer"
-                             style="width:26px;height:26px;border-radius:8px;object-fit:cover;flex-shrink:0;border:1px solid rgba(255,255,255,0.08);"
-                             onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(r.displayName||'U')}&background=1e293b&color=c5a059&size=50'">
-                        <div style="flex:1;">
-                            <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;flex-wrap:wrap;">
-                                <span ${rNameClick} style="color:${rIsMe?'#c5a059':'rgba(255,255,255,0.9)'};font-family:'Cairo',sans-serif;font-weight:900;font-size:11px;">${r.displayName||'مجهول'}</span>
-                                ${rIsMe ? '<span style="background:rgba(197,160,89,0.15);color:#c5a059;font-size:9px;padding:1px 5px;border-radius:10px;font-family:Cairo,sans-serif;">أنت</span>' : ''}
-                                <span style="color:rgba(255,255,255,0.2);font-size:9px;font-family:Cairo,sans-serif;margin-right:auto;">${rTime}</span>
-                            </div>
-                            <p style="color:rgba(255,255,255,0.75);font-family:'Cairo',sans-serif;font-size:11px;margin:0;line-height:1.5;">${r.text}</p>
+        .onSnapshot(handleSnap);
+}
+
+// دالة الرسم الفعلي مع قفل للحماية من التزامن
+async function doRenderComments(lessonId, snap) {
+    commentsRenderLock = true;
+    const list = document.getElementById('comments-list');
+    const countEl = document.getElementById('comments-count');
+    if (!list || !countEl) { commentsRenderLock = false; return; }
+
+    try {
+        if (!snap || snap.empty) {
+            list.innerHTML = `<div style="text-align:center;padding:24px;color:rgba(255,255,255,0.2);font-family:'Cairo',sans-serif;font-size:12px;">
+                <i class="fas fa-comment-dots" style="font-size:24px;margin-bottom:8px;display:block;opacity:0.4;"></i>
+                لا توجد تعليقات بعد، كن أول من يعلّق!
+            </div>`;
+            countEl.innerText = '0';
+            return;
+        }
+
+        const isMaster = currentUserRole === 'master';
+        const myEmail = auth.currentUser?.email?.toLowerCase() || '';
+        let totalCount = snap.size;
+        let html = '';
+
+        for (const doc of snap.docs) {
+            const d = doc.data();
+            const timeAgo = d.createdAt ? formatTimeAgo(d.createdAt.toDate()) : '';
+            const isMe = d.email === myEmail;
+            const canDelete = isMe || isMaster;
+            const nameClickable = isMaster
+                ? `onclick="viewUserProfile('${d.email}','${(d.displayName||'').replace(/'/g,"\\'")}','${(d.avatar||'').replace(/'/g,"\\'")}');" style="cursor:pointer;"`
+                : '';
+            const masterBadge = isMaster && !isMe
+                ? `<span style="background:rgba(239,68,68,0.1);color:#ef4444;font-size:9px;padding:1px 5px;border-radius:10px;font-family:Cairo,sans-serif;" title="${d.email}">👁</span>`
+                : '';
+
+            // جلب الردود
+            const repliesSnap = await db.collection('comments').doc(lessonId)
+                .collection('messages').doc(doc.id)
+                .collection('replies').orderBy('createdAt','asc').get();
+            totalCount += repliesSnap.size;
+
+            let repliesHtml = '';
+            repliesSnap.forEach(rDoc => {
+                const r = rDoc.data();
+                const rTime = r.createdAt ? formatTimeAgo(r.createdAt.toDate()) : '';
+                const rIsMe = r.email === myEmail;
+                const rCanDelete = rIsMe || isMaster;
+                const rNameClick = isMaster
+                    ? `onclick="viewUserProfile('${r.email}','${(r.displayName||'').replace(/'/g,"\\'")}','${(r.avatar||'').replace(/'/g,"\\'")}');" style="cursor:pointer;"`
+                    : '';
+                repliesHtml += `
+                <div style="display:flex;gap:8px;padding:8px 12px 8px 0;border-top:1px solid rgba(255,255,255,0.04);margin-top:4px;">
+                    <div style="width:2px;background:rgba(197,160,89,0.3);border-radius:2px;flex-shrink:0;margin-right:4px;"></div>
+                    <img src="${r.avatar||''}" referrerpolicy="no-referrer"
+                         style="width:26px;height:26px;border-radius:8px;object-fit:cover;flex-shrink:0;border:1px solid rgba(255,255,255,0.08);"
+                         onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(r.displayName||'U')}&background=1e293b&color=c5a059&size=50'">
+                    <div style="flex:1;">
+                        <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;flex-wrap:wrap;">
+                            <span ${rNameClick} style="color:${rIsMe?'#c5a059':'rgba(255,255,255,0.9)'};font-family:'Cairo',sans-serif;font-weight:900;font-size:11px;">${r.displayName||'مجهول'}</span>
+                            ${rIsMe ? '<span style="background:rgba(197,160,89,0.15);color:#c5a059;font-size:9px;padding:1px 5px;border-radius:10px;font-family:Cairo,sans-serif;">أنت</span>' : ''}
+                            <span style="color:rgba(255,255,255,0.2);font-size:9px;font-family:Cairo,sans-serif;margin-right:auto;">${rTime}</span>
                         </div>
-                        ${rCanDelete ? `<button onclick="deleteReply('${lessonId}','${doc.id}','${rDoc.id}')" style="background:none;border:none;color:rgba(239,68,68,0.4);cursor:pointer;font-size:11px;padding:0 2px;flex-shrink:0;"><i class="fas fa-trash-alt"></i></button>` : ''}
-                    </div>`;
-                });
-                html += `
-                <div style="border-bottom:1px solid rgba(255,255,255,0.05);">
-                    <div style="display:flex;gap:10px;padding:12px 14px;${isMe?'background:rgba(197,160,89,0.03);':''}">
-                        <img src="${d.avatar||''}" referrerpolicy="no-referrer"
-                             style="width:32px;height:32px;border-radius:10px;object-fit:cover;flex-shrink:0;border:1px solid rgba(255,255,255,0.1);margin-top:1px;"
-                             onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(d.displayName||'U')}&background=1e293b&color=c5a059&size=60'">
-                        <div style="flex:1;min-width:0;">
-                            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap;">
-                                <span ${nameClickable} style="color:${isMe?'#c5a059':'white'};font-family:'Cairo',sans-serif;font-weight:900;font-size:12px;">${d.displayName||'مجهول'}</span>
-                                ${isMe ? '<span style="background:rgba(197,160,89,0.15);color:#c5a059;font-size:9px;padding:1px 6px;border-radius:20px;font-family:Cairo,sans-serif;">أنت</span>' : ''}
-                                ${masterBadge}
-                                <span style="color:rgba(255,255,255,0.2);font-size:10px;font-family:Cairo,sans-serif;margin-right:auto;">${timeAgo}</span>
-                            </div>
-                            <p style="color:rgba(255,255,255,0.82);font-family:'Cairo',sans-serif;font-size:12px;margin:0 0 8px;line-height:1.6;">${d.text}</p>
-                            <button onclick="startReply('${doc.id}','${(d.displayName||'').replace(/'/g,"\\'")}')"
-                                style="background:none;border:none;color:rgba(197,160,89,0.6);font-family:'Cairo',sans-serif;font-size:11px;font-weight:700;cursor:pointer;padding:0;display:flex;align-items:center;gap:4px;">
-                                <i class="fas fa-reply" style="font-size:10px;"></i> رد
-                            </button>
-                            ${repliesHtml ? `<div style="margin-top:6px;">${repliesHtml}</div>` : ''}
-                        </div>
-                        ${canDelete ? `<button onclick="deleteComment('${lessonId}','${doc.id}')" style="background:none;border:none;color:rgba(239,68,68,0.4);cursor:pointer;font-size:12px;padding:0 2px;flex-shrink:0;"><i class="fas fa-trash-alt"></i></button>` : ''}
+                        <p style="color:rgba(255,255,255,0.75);font-family:'Cairo',sans-serif;font-size:11px;margin:0;line-height:1.5;">${r.text}</p>
                     </div>
+                    ${rCanDelete ? `<button onclick="deleteReply('${lessonId}','${doc.id}','${rDoc.id}')" style="background:none;border:none;color:rgba(239,68,68,0.4);cursor:pointer;font-size:11px;padding:0 2px;flex-shrink:0;"><i class="fas fa-trash-alt"></i></button>` : ''}
                 </div>`;
-            }
-            countEl.innerText = totalCount;
-            list.innerHTML = html;
-        });
+            });
+
+            html += `
+            <div style="border-bottom:1px solid rgba(255,255,255,0.05);">
+                <div style="display:flex;gap:10px;padding:12px 14px;${isMe?'background:rgba(197,160,89,0.03);':''}">
+                    <img src="${d.avatar||''}" referrerpolicy="no-referrer"
+                         style="width:32px;height:32px;border-radius:10px;object-fit:cover;flex-shrink:0;border:1px solid rgba(255,255,255,0.1);margin-top:1px;"
+                         onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(d.displayName||'U')}&background=1e293b&color=c5a059&size=60'">
+                    <div style="flex:1;min-width:0;">
+                        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap;">
+                            <span ${nameClickable} style="color:${isMe?'#c5a059':'white'};font-family:'Cairo',sans-serif;font-weight:900;font-size:12px;">${d.displayName||'مجهول'}</span>
+                            ${isMe ? '<span style="background:rgba(197,160,89,0.15);color:#c5a059;font-size:9px;padding:1px 6px;border-radius:20px;font-family:Cairo,sans-serif;">أنت</span>' : ''}
+                            ${masterBadge}
+                            <span style="color:rgba(255,255,255,0.2);font-size:10px;font-family:Cairo,sans-serif;margin-right:auto;">${timeAgo}</span>
+                        </div>
+                        <p style="color:rgba(255,255,255,0.82);font-family:'Cairo',sans-serif;font-size:12px;margin:0 0 8px;line-height:1.6;">${d.text}</p>
+                        <button onclick="startReply('${doc.id}','${(d.displayName||'').replace(/'/g,"\\'")}')"
+                            style="background:none;border:none;color:rgba(197,160,89,0.6);font-family:'Cairo',sans-serif;font-size:11px;font-weight:700;cursor:pointer;padding:0;display:flex;align-items:center;gap:4px;">
+                            <i class="fas fa-reply" style="font-size:10px;"></i> رد
+                        </button>
+                        ${repliesHtml ? `<div style="margin-top:6px;">${repliesHtml}</div>` : ''}
+                    </div>
+                    ${canDelete ? `<button onclick="deleteComment('${lessonId}','${doc.id}')" style="background:none;border:none;color:rgba(239,68,68,0.4);cursor:pointer;font-size:12px;padding:0 2px;flex-shrink:0;"><i class="fas fa-trash-alt"></i></button>` : ''}
+                </div>
+            </div>`;
+        }
+
+        countEl.innerText = totalCount;
+        list.innerHTML = html;
+
+    } catch(e) {
+        console.error('Comments render error:', e);
+    } finally {
+        commentsRenderLock = false;
+        // لو في snapshot انتظر أثناء الرسم، ارسمه الآن
+        if (commentsPendingSnap) {
+            const pending = commentsPendingSnap;
+            commentsPendingSnap = null;
+            await doRenderComments(pending.lessonId, pending.snap);
+        }
+    }
+}
+
+// إعادة رسم يدوية (تُستخدم بعد إضافة الردود)
+async function forceReloadComments(lessonId) {
+    try {
+        const snap = await db.collection('comments').doc(lessonId)
+            .collection('messages').orderBy('createdAt','asc').get();
+        await doRenderComments(lessonId, snap);
+    } catch(e) {
+        console.error('Force reload error:', e);
+    }
 }
 
 function startReply(commentId, displayName) {
@@ -1340,17 +1403,24 @@ async function submitComment() {
     if (!user || !currentLessonId) return;
     const displayName = await getMyDisplayName();
     input.value = '';
+
     if (replyingTo) {
+        // الردود تُضاف في subcollection - لا تُطلق onSnapshot تلقائياً
+        // لذلك نُعيد الرسم يدوياً بعد الإضافة
+        const targetCommentId = replyingTo.commentId;
+        cancelReply();
         await db.collection('comments').doc(currentLessonId)
-            .collection('messages').doc(replyingTo.commentId)
+            .collection('messages').doc(targetCommentId)
             .collection('replies').add({
                 text, displayName,
                 email: user.email.toLowerCase(),
                 avatar: user.photoURL || '',
                 createdAt: firebase.firestore.FieldValue.serverTimestamp()
             });
-        cancelReply();
+        // إعادة رسم يدوية لإظهار الرد فوراً
+        await forceReloadComments(currentLessonId);
     } else {
+        // التعليق الجديد يُطلق onSnapshot تلقائياً
         await db.collection('comments').doc(currentLessonId)
             .collection('messages').add({
                 text, displayName,

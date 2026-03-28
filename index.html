@@ -268,7 +268,7 @@
 
                     <!-- صفوف الطالب -->
                     <div id="user-grades-container" class="mb-4">
-                        <label class="block text-gray-400 text-xs mb-2 text-right font-bold">حدد الصوفوف المسموح بها للطالب بدخولها:</label>
+                        <label class="block text-gray-400 text-xs mb-2 text-right font-bold">الصفوف المسموح بها:</label>
                         <div class="grid grid-cols-2 gap-2 bg-black/20 p-3 rounded-xl border border-white/5">
                             <label class="flex items-center gap-2 cursor-pointer group">
                                 <input type="checkbox" class="grade-check" value="1-mid"
@@ -379,14 +379,27 @@
 </div>
 
 <!-- ====== مشغل المحتوى (فيديو + صور + تعليقات) ====== -->
-<div id="video-player-modal" style="display:none; position:fixed; inset:0; z-index:20000; background:rgba(5,8,15,0.98); overflow-y:auto; -webkit-overflow-scrolling:touch;" onclick="closePlayer()">
-    <div style="width:100%; max-width:1100px; margin:0 auto; padding:12px 12px 80px; display:flex; flex-direction:column; gap:14px; box-sizing:border-box;" onclick="event.stopPropagation()">
+<div id="video-player-modal" style="display:none; position:fixed; inset:0; z-index:20000; background:rgba(5,8,15,0.98); overflow-y:auto; -webkit-overflow-scrolling:touch;
+     padding-top: env(safe-area-inset-top, 0px);
+     padding-left: env(safe-area-inset-left, 0px);
+     padding-right: env(safe-area-inset-right, 0px);" onclick="closePlayer()">
 
-        <!-- هيدر -->
-        <div style="display:flex; align-items:center; justify-content:space-between; padding-top:6px;">
-            <h3 id="video-title-display" style="color:white; font-family:'Cairo',sans-serif; font-weight:900; font-size:clamp(13px,3vw,18px); margin:0; flex:1; line-height:1.4; padding-left:10px;"></h3>
-            <button onclick="closePlayer()" style="background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.1); color:white; width:40px; height:40px; border-radius:50%; font-size:20px; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; transition:background 0.2s;" onmouseover="this.style.background='rgba(239,68,68,0.2)'" onmouseout="this.style.background='rgba(255,255,255,0.08)'">&times;</button>
-        </div>
+    <!-- زرار الإغلاق الثابت - يظهر دائماً بغض النظر عن الـ scroll أو الـ safe area -->
+    <button onclick="closePlayer(); event.stopPropagation();"
+        style="position:sticky; top:calc(8px + env(safe-area-inset-top, 0px)); left:calc(8px + env(safe-area-inset-left, 0px));
+               float:left; z-index:100; margin:8px;
+               background:rgba(15,15,25,0.92); border:1px solid rgba(255,255,255,0.15);
+               backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+               color:white; width:42px; height:42px; border-radius:50%; font-size:22px;
+               cursor:pointer; display:flex; align-items:center; justify-content:center;
+               flex-shrink:0; transition:background 0.2s; box-shadow:0 4px 15px rgba(0,0,0,0.5);"
+        onmouseover="this.style.background='rgba(239,68,68,0.5)'"
+        onmouseout="this.style.background='rgba(15,15,25,0.92)'">&times;</button>
+
+    <div style="width:100%; max-width:1100px; margin:0 auto; padding:0 12px 80px; display:flex; flex-direction:column; gap:14px; box-sizing:border-box; clear:both;" onclick="event.stopPropagation()">
+
+        <!-- عنوان المحتوى -->
+        <h3 id="video-title-display" style="color:white; font-family:'Cairo',sans-serif; font-weight:900; font-size:clamp(13px,3vw,18px); margin:0; line-height:1.4; padding:4px 0 8px;"></h3>
 
         <!-- الإطار (فيديو أو صورة) -->
         <div class="video-container animate__animated animate__zoomIn" style="border-radius:16px; overflow:hidden;">
@@ -476,8 +489,8 @@
                 </div>
             </div>
         </div>
-    </div>
-</div>
+    </div><!-- end inner content wrapper -->
+</div><!-- end video-player-modal -->
 
 <!-- ====== المحتوى الرئيسي ====== -->
 <main id="app-content" class="hidden container mx-auto px-4 py-6 md:px-6 md:py-12">
