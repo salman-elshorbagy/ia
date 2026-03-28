@@ -1232,39 +1232,36 @@ async function submitModalRating(lessonId, val) {
 // ============================================
 let replyingTo = null;
 
-// قفل منع التزامن في الرسم (يمنع اختفاء التعليقات)
-let commentsRenderLock = false;
-let commentsPendingSnap = null;
+// *** إصلاح Bug 2: نظام الإصدارات بدلاً من الـ lock ***
+// كل مرة بنطلب render جديد، رقم الإصدار بيزيد
+// الـ render القديم لو اتأخر مش هيحدث الـ DOM عشان رقمه بقى قديم
+let commentsRenderVersion = 0;
 
 function listenComments(lessonId) {
     if (commentsUnsubscribe) commentsUnsubscribe();
-    commentsRenderLock = false;
-    commentsPendingSnap = null;
-
-    const handleSnap = async (snap) => {
-        // لو في عملية رسم جارية، احفظ أحدث snapshot وانتظر
-        if (commentsRenderLock) {
-            commentsPendingSnap = { lessonId, snap };
-            return;
-        }
-        await doRenderComments(lessonId, snap);
-    };
+    // إعادة ضبط العداد لما بنبدأ listener جديد
+    commentsRenderVersion = 0;
 
     commentsUnsubscribe = db.collection('comments').doc(lessonId)
         .collection('messages')
         .orderBy('createdAt', 'asc')
-        .onSnapshot(handleSnap);
+        .onSnapshot(snap => {
+            doRenderComments(lessonId, snap);
+        });
 }
 
-// دالة الرسم الفعلي مع قفل للحماية من التزامن
+// دالة الرسم الفعلي بنظام الإصدارات
 async function doRenderComments(lessonId, snap) {
-    commentsRenderLock = true;
+    // نحجز رقم إصدار لهذا الـ render
+    const myVersion = ++commentsRenderVersion;
     const list = document.getElementById('comments-list');
     const countEl = document.getElementById('comments-count');
-    if (!list || !countEl) { commentsRenderLock = false; return; }
+    if (!list || !countEl) return;
 
     try {
         if (!snap || snap.empty) {
+            // تحقق من الإصدار قبل تحديث الـ DOM
+            if (myVersion !== commentsRenderVersion) return;
             list.innerHTML = `<div style="text-align:center;padding:24px;color:rgba(255,255,255,0.2);font-family:'Cairo',sans-serif;font-size:12px;">
                 <i class="fas fa-comment-dots" style="font-size:24px;margin-bottom:8px;display:block;opacity:0.4;"></i>
                 لا توجد تعليقات بعد، كن أول من يعلّق!
@@ -1305,23 +1302,56 @@ async function doRenderComments(lessonId, snap) {
                 const rNameClick = isMaster
                     ? `onclick="viewUserProfile('${r.email}','${(r.displayName||'').replace(/'/g,"\\'")}','${(r.avatar||'').replace(/'/g,"\\'")}');" style="cursor:pointer;"`
                     : '';
+
+                // صندوق الاقتباس — يظهر لو الرد يستهدف شخصاً معيناً
+                const quoteBox = (r.replyToName && r.replyToText)
+                    ? `<div style="
+                            border-right: 3px solid #c5a059;
+                            background: rgba(197,160,89,0.07);
+                            border-radius: 8px;
+                            padding: 5px 9px;
+                            margin-bottom: 5px;
+                            max-width: 100%;
+                        ">
+                            <span style="color:#c5a059;font-family:'Cairo',sans-serif;font-size:10px;font-weight:900;display:block;margin-bottom:1px;">
+                                <i class="fas fa-reply" style="font-size:9px;margin-left:3px;"></i>${r.replyToName}
+                            </span>
+                            <span style="color:rgba(255,255,255,0.4);font-family:'Cairo',sans-serif;font-size:10px;
+                                         display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;">
+                                ${r.replyToText}
+                            </span>
+                       </div>`
+                    : '';
+
+                // زرار الرد على الرد (يستهدف نفس التعليق الأب)
+                const escapedRName = (r.displayName||'').replace(/'/g,"\\'").replace(/"/g,'&quot;');
+                const escapedRText = (r.text||'').replace(/'/g,"\\'").replace(/"/g,'&quot;').substring(0,80);
                 repliesHtml += `
-                <div style="display:flex;gap:8px;padding:8px 12px 8px 0;border-top:1px solid rgba(255,255,255,0.04);margin-top:4px;">
-                    <div style="width:2px;background:rgba(197,160,89,0.3);border-radius:2px;flex-shrink:0;margin-right:4px;"></div>
+                <div style="display:flex;gap:8px;padding:9px 0 9px 0;border-top:1px solid rgba(255,255,255,0.04);margin-top:4px;">
+                    <div style="width:2px;background:rgba(197,160,89,0.35);border-radius:2px;flex-shrink:0;margin:0 4px;"></div>
                     <img src="${r.avatar||''}" referrerpolicy="no-referrer"
-                         style="width:26px;height:26px;border-radius:8px;object-fit:cover;flex-shrink:0;border:1px solid rgba(255,255,255,0.08);"
+                         style="width:28px;height:28px;border-radius:8px;object-fit:cover;flex-shrink:0;border:1px solid rgba(255,255,255,0.08);margin-top:2px;"
                          onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(r.displayName||'U')}&background=1e293b&color=c5a059&size=50'">
-                    <div style="flex:1;">
-                        <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;flex-wrap:wrap;">
+                    <div style="flex:1;min-width:0;">
+                        <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;flex-wrap:wrap;">
                             <span ${rNameClick} style="color:${rIsMe?'#c5a059':'rgba(255,255,255,0.9)'};font-family:'Cairo',sans-serif;font-weight:900;font-size:11px;">${r.displayName||'مجهول'}</span>
                             ${rIsMe ? '<span style="background:rgba(197,160,89,0.15);color:#c5a059;font-size:9px;padding:1px 5px;border-radius:10px;font-family:Cairo,sans-serif;">أنت</span>' : ''}
                             <span style="color:rgba(255,255,255,0.2);font-size:9px;font-family:Cairo,sans-serif;margin-right:auto;">${rTime}</span>
                         </div>
-                        <p style="color:rgba(255,255,255,0.75);font-family:'Cairo',sans-serif;font-size:11px;margin:0;line-height:1.5;">${r.text}</p>
+                        ${quoteBox}
+                        <p style="color:rgba(255,255,255,0.78);font-family:'Cairo',sans-serif;font-size:11px;margin:0 0 5px;line-height:1.55;">${r.text}</p>
+                        <button onclick="startReply('${doc.id}','${escapedRName}','${escapedRText}')"
+                            style="background:none;border:none;color:rgba(197,160,89,0.5);font-family:'Cairo',sans-serif;font-size:10px;font-weight:700;cursor:pointer;padding:0;display:flex;align-items:center;gap:3px;">
+                            <i class="fas fa-reply" style="font-size:9px;"></i> رد
+                        </button>
                     </div>
-                    ${rCanDelete ? `<button onclick="deleteReply('${lessonId}','${doc.id}','${rDoc.id}')" style="background:none;border:none;color:rgba(239,68,68,0.4);cursor:pointer;font-size:11px;padding:0 2px;flex-shrink:0;"><i class="fas fa-trash-alt"></i></button>` : ''}
+                    ${rCanDelete ? `<button onclick="deleteReply('${lessonId}','${doc.id}','${rDoc.id}')" style="background:none;border:none;color:rgba(239,68,68,0.4);cursor:pointer;font-size:11px;padding:0 2px;flex-shrink:0;align-self:flex-start;margin-top:2px;"><i class="fas fa-trash-alt"></i></button>` : ''}
                 </div>`;
             });
+
+            // زرار الرد على التعليق الأصلي
+            const escapedDName = (d.displayName||'').replace(/'/g,"\\'").replace(/"/g,'&quot;');
+            const escapedDText = (d.text||'').replace(/'/g,"\\'").replace(/"/g,'&quot;').substring(0,80);
 
             html += `
             <div style="border-bottom:1px solid rgba(255,255,255,0.05);">
@@ -1337,53 +1367,62 @@ async function doRenderComments(lessonId, snap) {
                             <span style="color:rgba(255,255,255,0.2);font-size:10px;font-family:Cairo,sans-serif;margin-right:auto;">${timeAgo}</span>
                         </div>
                         <p style="color:rgba(255,255,255,0.82);font-family:'Cairo',sans-serif;font-size:12px;margin:0 0 8px;line-height:1.6;">${d.text}</p>
-                        <button onclick="startReply('${doc.id}','${(d.displayName||'').replace(/'/g,"\\'")}')"
+                        <button onclick="startReply('${doc.id}','${escapedDName}','${escapedDText}')"
                             style="background:none;border:none;color:rgba(197,160,89,0.6);font-family:'Cairo',sans-serif;font-size:11px;font-weight:700;cursor:pointer;padding:0;display:flex;align-items:center;gap:4px;">
                             <i class="fas fa-reply" style="font-size:10px;"></i> رد
                         </button>
-                        ${repliesHtml ? `<div style="margin-top:6px;">${repliesHtml}</div>` : ''}
+                        ${repliesHtml ? `<div style="margin-top:8px;padding-right:4px;">${repliesHtml}</div>` : ''}
                     </div>
-                    ${canDelete ? `<button onclick="deleteComment('${lessonId}','${doc.id}')" style="background:none;border:none;color:rgba(239,68,68,0.4);cursor:pointer;font-size:12px;padding:0 2px;flex-shrink:0;"><i class="fas fa-trash-alt"></i></button>` : ''}
+                    ${canDelete ? `<button onclick="deleteComment('${lessonId}','${doc.id}')" style="background:none;border:none;color:rgba(239,68,68,0.4);cursor:pointer;font-size:12px;padding:0 2px;flex-shrink:0;align-self:flex-start;"><i class="fas fa-trash-alt"></i></button>` : ''}
                 </div>
             </div>`;
         }
+
+        // *** إصلاح Bug 2 ***
+        // قبل ما نحدث الـ DOM، نتحقق إن مفيش render أحدث منا
+        // لو في render أحدث، ده معناه البيانات دي قديمة ومش المفروض تظهر
+        if (myVersion !== commentsRenderVersion) return;
 
         countEl.innerText = totalCount;
         list.innerHTML = html;
 
     } catch(e) {
         console.error('Comments render error:', e);
-    } finally {
-        commentsRenderLock = false;
-        // لو في snapshot انتظر أثناء الرسم، ارسمه الآن
-        if (commentsPendingSnap) {
-            const pending = commentsPendingSnap;
-            commentsPendingSnap = null;
-            await doRenderComments(pending.lessonId, pending.snap);
-        }
     }
 }
 
-// إعادة رسم يدوية (تُستخدم بعد إضافة الردود)
+// إعادة رسم يدوية (بعد إضافة/حذف الردود)
 async function forceReloadComments(lessonId) {
     try {
         const snap = await db.collection('comments').doc(lessonId)
             .collection('messages').orderBy('createdAt','asc').get();
+        // نستخدم نفس doRenderComments اللي فيها نظام الإصدارات
+        // لو في render أحدث منها خلال الـ await، النتيجة هتتجاهل تلقائياً
         await doRenderComments(lessonId, snap);
     } catch(e) {
         console.error('Force reload error:', e);
     }
 }
 
-function startReply(commentId, displayName) {
-    replyingTo = { commentId, displayName };
+function startReply(commentId, displayName, replyToText) {
+    replyingTo = { commentId, displayName, replyToText: replyToText || '' };
     const input = document.getElementById('comment-input');
     input.placeholder = `ردك على ${displayName}...`;
     input.focus();
+    input.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     const indicator = document.getElementById('reply-indicator');
     if (indicator) {
         indicator.style.display = 'flex';
         indicator.querySelector('#reply-to-name').innerText = displayName;
+        const snippetEl = document.getElementById('reply-to-snippet');
+        if (snippetEl) {
+            if (replyToText) {
+                snippetEl.innerText = replyToText;
+                snippetEl.style.display = 'block';
+            } else {
+                snippetEl.style.display = 'none';
+            }
+        }
     }
 }
 
@@ -1405,9 +1444,9 @@ async function submitComment() {
     input.value = '';
 
     if (replyingTo) {
-        // الردود تُضاف في subcollection - لا تُطلق onSnapshot تلقائياً
-        // لذلك نُعيد الرسم يدوياً بعد الإضافة
         const targetCommentId = replyingTo.commentId;
+        const replyToName = replyingTo.displayName || '';
+        const replyToText = replyingTo.replyToText || '';
         cancelReply();
         await db.collection('comments').doc(currentLessonId)
             .collection('messages').doc(targetCommentId)
@@ -1415,12 +1454,12 @@ async function submitComment() {
                 text, displayName,
                 email: user.email.toLowerCase(),
                 avatar: user.photoURL || '',
+                replyToName,
+                replyToText,
                 createdAt: firebase.firestore.FieldValue.serverTimestamp()
             });
-        // إعادة رسم يدوية لإظهار الرد فوراً
         await forceReloadComments(currentLessonId);
     } else {
-        // التعليق الجديد يُطلق onSnapshot تلقائياً
         await db.collection('comments').doc(currentLessonId)
             .collection('messages').add({
                 text, displayName,
@@ -1441,9 +1480,13 @@ async function deleteComment(lessonId, commentId) {
 }
 
 async function deleteReply(lessonId, commentId, replyId) {
+    // *** إصلاح Bug 1 ***
+    // الـ onSnapshot على messages مش بيشتغل لما حاجة في replies بتتحذف
+    // فلازم نعمل reload يدوي بعد الحذف عشان الـ UI يتحدث
     await db.collection('comments').doc(lessonId)
         .collection('messages').doc(commentId)
         .collection('replies').doc(replyId).delete();
+    await forceReloadComments(lessonId);
 }
 
 // ============================================
