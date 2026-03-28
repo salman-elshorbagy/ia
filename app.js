@@ -829,8 +829,16 @@ function loadUsersList() {
 
             usersDataMap.set(targetEmail, data);
 
-            const userName = data.displayName || data.googleName || '';
-            const userAvatar = data.photoURL || '';
+            // ---- الاسم والأفاتار بمنطق موحّد ----
+            const userName  = resolveUserName(data);          // null لو مستخدم جديد
+            const isNewUser = !userName && !data.photoURL;    // مستخدم جديد فعلاً
+
+            const displayedName  = userName  || (isNewUser ? 'مستخدم جديد' : '');
+            const avatarHtml = buildAvatarHtml(
+                data,
+                targetEmail,
+                'width:36px;height:36px;border-radius:10px;border:1px solid rgba(197,160,89,0.2);'
+            );
 
             let badgeText = isTargetMaster ? "👑 مشرف عام" : "🎓 طالب";
             let badgeStyle = isTargetMaster
@@ -858,15 +866,16 @@ function loadUsersList() {
 
             h += `
             <div style="display:flex; align-items:center; gap:10px; padding:9px 10px; background:rgba(255,255,255,0.04); border-radius:10px; border:1px solid ${isTargetSelf ? 'rgba(197,160,89,0.2)' : 'rgba(255,255,255,0.05)'}; margin-bottom:5px;">
-                <img src="${userAvatar}" referrerpolicy="no-referrer"
-                     style="width:36px;height:36px;border-radius:10px;object-fit:cover;flex-shrink:0;border:1px solid rgba(197,160,89,0.2);"
-                     onerror="this.onerror=null;this.src=''">
+                ${avatarHtml}
                 <div style="flex:1; min-width:0; overflow:hidden;">
-                    ${userName ? `<p style="color:${isTargetSelf?'#c5a059':'white'};font-size:11px;font-weight:900;margin:0 0 1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${userName} ${isTargetSelf?'<span style="color:#c5a059;font-size:9px;">· أنت</span>':''}</p>` : ''}
-                    <p style="color:rgba(255,255,255,0.35); font-size:9px; margin:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; direction:ltr; text-align:right;">${doc.id}</p>
+                    <div style="display:flex;align-items:center;gap:4px;margin-bottom:1px;flex-wrap:wrap;">
+                        <p style="color:${isTargetSelf?'#c5a059':'white'};font-size:${displayedName?'11':'9'}px;font-weight:${displayedName?'900':'600'};margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${isNewUser?'font-style:italic;opacity:0.55;':''}">${displayedName || targetEmail}</p>
+                        ${isTargetSelf ? '<span style="color:#c5a059; font-size:9px; font-weight:700; flex-shrink:0;">· أنت</span>' : ''}
+                        ${isNewUser ? '<span style="background:rgba(100,116,139,0.2);color:rgba(255,255,255,0.4);font-size:8px;padding:1px 6px;border-radius:10px;font-family:Cairo,sans-serif;flex-shrink:0;">جديد</span>' : ''}
+                    </div>
+                    <p style="color:rgba(255,255,255,0.3); font-size:9px; margin:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; direction:ltr; text-align:right;">${doc.id}</p>
                     <div style="display:flex; align-items:center; gap:4px; margin-top:2px; flex-wrap:wrap;">
                         <span style="${badgeStyle}">${badgeText}</span>
-                        ${!userName && isTargetSelf ? '<span style="color:#c5a059; font-size:9px; font-weight:700;">· أنت</span>' : ''}
                         ${gradeNames ? `<span style="color:rgba(255,255,255,0.25); font-size:8px;">· ${gradeNames}</span>` : ''}
                     </div>
                 </div>
@@ -906,25 +915,127 @@ async function deleteUser(email) {
     if (email === auth.currentUser.email.toLowerCase()) {
         return showToast("لا يمكنك حذف حسابك!", "error");
     }
+
+    // ======= تأكيد الحذف مع توضيح ما سيُحذف =======
     const result = await Swal.fire({
         target: document.getElementById('admin-modal'),
-        title: 'هل أنت متأكد؟',
-        text: `سيتم حذف صلاحية: ${email}`,
-        icon: 'warning',
+        title: '⚠️ حذف نهائي وشامل',
+        html: `<div style="font-family:'Cairo',sans-serif;direction:rtl;text-align:right;font-size:13px;color:rgba(255,255,255,0.8);">
+            <p style="margin:0 0 10px;">سيتم حذف جميع بيانات هذا المستخدم نهائياً:</p>
+            <ul style="margin:0;padding-right:16px;line-height:2;color:rgba(255,255,255,0.6);">
+                <li>📋 صلاحية الوصول للمنصة</li>
+                <li>📚 سجل المشاهدات والإنجازات</li>
+                <li>⭐ جميع التقييمات التي قيّمها</li>
+                <li>💬 جميع تعليقاته وردوده</li>
+            </ul>
+            <p style="margin:12px 0 0;padding:8px 10px;background:rgba(239,68,68,0.1);border-radius:10px;border:1px solid rgba(239,68,68,0.2);color:#fca5a5;font-size:12px;">
+                <b>${email}</b><br>لا يمكن التراجع عن هذه العملية
+            </p>
+        </div>`,
+        icon: 'error',
         showCancelButton: true,
         confirmButtonColor: '#ef4444',
         cancelButtonColor: '#6b7280',
-        confirmButtonText: 'نعم، احذف',
-        cancelButtonText: 'إلغاء',
+        confirmButtonText: 'نعم، احذف كل شيء',
+        cancelButtonText: 'تراجع',
         background: '#111827',
         color: '#fff',
         heightAuto: false,
         scrollbarPadding: false,
         returnFocus: false
     });
-    if (result.isConfirmed) {
-        await db.collection("users_access").doc(email).delete();
-        showToast("تم حذف المستخدم بنجاح", "success");
+
+    if (!result.isConfirmed) return;
+
+    // ======= شاشة التحميل =======
+    Swal.fire({
+        target: document.getElementById('admin-modal'),
+        title: 'جاري الحذف...',
+        html: `<div style="font-family:'Cairo',sans-serif;font-size:12px;color:rgba(255,255,255,0.5);">
+            <i class="fas fa-spinner fa-spin" style="font-size:20px;color:#c5a059;display:block;margin-bottom:10px;"></i>
+            يتم الآن حذف جميع البيانات، انتظر لحظة...
+        </div>`,
+        background: '#111827',
+        color: '#fff',
+        allowOutsideClick: false,
+        showConfirmButton: false,
+        heightAuto: false,
+    });
+
+    try {
+        const batch = db.batch();
+        const emailLower = email.toLowerCase();
+
+        // ---- 1. حذف صلاحية الوصول ----
+        batch.delete(db.collection("users_access").doc(emailLower));
+
+        // ---- 2. حذف سجل المشاهدات ----
+        batch.delete(db.collection("watched").doc(emailLower));
+
+        // ---- 3. حذف التقييمات من كل الدروس ----
+        const ratingsSnap = await db.collection("ratings").get();
+        ratingsSnap.forEach(doc => {
+            const ratings = doc.data().ratings || {};
+            if (emailLower in ratings) {
+                batch.update(doc.ref, {
+                    [`ratings.${emailLower}`]: firebase.firestore.FieldValue.delete()
+                });
+            }
+        });
+
+        // ---- 4. حذف التعليقات والردود من كل الدروس ----
+        const lessonsSnap = await db.collection("lessons").get();
+
+        for (const lessonDoc of lessonsSnap.docs) {
+            const lessonId = lessonDoc.id;
+            const messagesSnap = await db.collection("comments")
+                .doc(lessonId).collection("messages").get();
+
+            for (const msgDoc of messagesSnap.docs) {
+                const msgData = msgDoc.data();
+
+                // حذف ردوده على تعليقات الآخرين
+                const repliesSnap = await msgDoc.ref.collection("replies").get();
+                repliesSnap.forEach(replyDoc => {
+                    if (replyDoc.data().email === emailLower) {
+                        batch.delete(replyDoc.ref);
+                    }
+                });
+
+                // لو التعليق نفسه بتاعه: احذفه + كل ردوده
+                if (msgData.email === emailLower) {
+                    repliesSnap.forEach(replyDoc => batch.delete(replyDoc.ref));
+                    batch.delete(msgDoc.ref);
+                }
+            }
+        }
+
+        await batch.commit();
+
+        Swal.fire({
+            target: document.getElementById('admin-modal'),
+            title: 'تم الحذف ✅',
+            text: 'تم حذف جميع بيانات المستخدم بنجاح',
+            icon: 'success',
+            timer: 2500,
+            showConfirmButton: false,
+            background: '#111827',
+            color: '#fff',
+            heightAuto: false,
+        });
+
+    } catch (e) {
+        console.error("deleteUser error:", e);
+        Swal.fire({
+            target: document.getElementById('admin-modal'),
+            title: 'حدث خطأ!',
+            text: 'تعذّر إتمام عملية الحذف، حاول مرة أخرى',
+            icon: 'error',
+            confirmButtonColor: '#ef4444',
+            background: '#111827',
+            color: '#fff',
+            heightAuto: false,
+        });
     }
 }
 
@@ -1077,6 +1188,60 @@ const gradeMap = {
     '1-mid':'أولى إعدادي','2-mid':'تانية إعدادي','3-mid':'تالتة إعدادي',
     '1-sec':'أولى ثانوي','2-sec':'تانية ثانوي','3-sec':'تالتة ثانوي'
 };
+
+// ============================================
+//  مساعد موحّد: اسم + أفاتار المستخدم
+//  يعالج حالة "مستخدم جديد" (لم يسجّل دخول بعد)
+// ============================================
+
+/**
+ * يُرجع الاسم الصحيح للمستخدم.
+ * لو لا يوجد اسم → يُرجع 'مستخدم جديد'
+ */
+function resolveUserName(data) {
+    return data.displayName || data.googleName || null;
+}
+
+/**
+ * يُرجع HTML جاهز للأفاتار.
+ * - لو في photoURL حقيقي  → <img> مع referrerPolicy
+ * - لو مفيش (مستخدم جديد) → <div> Placeholder بالحرف الأول
+ *
+ * @param {object} data - بيانات المستخدم من Firestore
+ * @param {string} email - إيميل المستخدم (لاستخراج الحرف الأول كاحتياطي)
+ * @param {string} styles - CSS inline للعنصر (width, height, border-radius, …)
+ */
+function buildAvatarHtml(data, email, styles) {
+    const photoURL = data.photoURL || '';
+    const name     = resolveUserName(data) || email || '?';
+    const initial  = name.charAt(0).toUpperCase();
+
+    if (photoURL) {
+        return `<img src="${photoURL}" referrerpolicy="no-referrer"
+                     style="${styles}object-fit:cover;"
+                     onerror="this.onerror=null;this.replaceWith(buildAvatarPlaceholder('${initial}','${styles}'))">`;
+    }
+
+    // Placeholder ثابت — بدون أي <img>
+    return `<div style="${styles}background:linear-gradient(135deg,#1e3a5f,#0f172a);
+                  display:flex;align-items:center;justify-content:center;
+                  font-family:'Cairo',sans-serif;font-weight:900;color:#60a5fa;flex-shrink:0;"
+                  title="${email}">${initial}</div>`;
+}
+
+/**
+ * يُنشئ Placeholder DOM Node (يُستخدم في onerror بديل)
+ * لا يُستدعى مباشرة من JS — فقط reference لـ onerror
+ */
+function buildAvatarPlaceholder(initial, styles) {
+    const div = document.createElement('div');
+    div.style.cssText = styles +
+        'background:linear-gradient(135deg,#1e3a5f,#0f172a);' +
+        'display:flex;align-items:center;justify-content:center;' +
+        'font-family:Cairo,sans-serif;font-weight:900;color:#60a5fa;flex-shrink:0;';
+    div.innerText = initial;
+    return div;
+}
 
 async function openProfile() {
     if (document.getElementById('drop-menu').style.display === 'flex') toggleMenu();
@@ -1306,15 +1471,22 @@ async function loadRatingsDetails(lessonId) {
         const stars = Array.from({length: 5}, (_, i) =>
             `<i class="fas fa-star" style="font-size:11px; color:${i < rating ? '#c5a059' : '#374151'};"></i>`
         ).join('');
+
+        // أفاتار الرتبة بالمساعد الموحّد
+        const ratingAvatarHtml = buildAvatarHtml(
+            { photoURL: avatarUrl, displayName: name },
+            email,
+            `width:34px;height:34px;border-radius:9px;border:1px solid rgba(197,160,89,0.2);flex-shrink:0;font-size:14px;${currentUserRole==='master'?'cursor:pointer;':''}`
+        );
+
         const nameClickAttr = currentUserRole === 'master'
             ? `onclick="viewUserProfile('${email}','${name.replace(/'/g,"\\'")}','${avatarUrl.replace(/'/g,"\\'")}');" style="cursor:pointer; color:white; font-family:'Cairo',sans-serif; font-size:12px; font-weight:700; text-decoration:underline dotted rgba(197,160,89,0.4);"`
             : `style="color:white; font-family:'Cairo',sans-serif; font-size:12px; font-weight:700;"`;
         html += `
         <div style="display:flex; align-items:center; gap:10px; padding:10px 14px; border-bottom:1px solid rgba(255,255,255,0.04);">
-            <img src="${avatarUrl}" referrerpolicy="no-referrer"
-                 style="width:34px; height:34px; border-radius:9px; object-fit:cover; flex-shrink:0; border:1px solid rgba(197,160,89,0.2); ${currentUserRole==='master'?'cursor:pointer;':''}"
-                 onerror="this.onerror=null;this.src=''"
-                 ${currentUserRole==='master' ? `onclick="viewUserProfile('${email}','${name.replace(/'/g,"\\'")}','${avatarUrl.replace(/'/g,"\\'")}');"` : ''}>
+            <div ${currentUserRole==='master' ? `onclick="viewUserProfile('${email}','${name.replace(/'/g,"\\'")}','${avatarUrl.replace(/'/g,"\\'")}');"` : ''} style="flex-shrink:0;${currentUserRole==='master'?'cursor:pointer;':''}">
+                ${buildAvatarHtml({photoURL:avatarUrl,displayName:name}, email, 'width:34px;height:34px;border-radius:9px;font-size:13px;')}
+            </div>
             <div style="flex:1;">
                 <p ${nameClickAttr} style="margin:0 0 3px;">${name}</p>
                 <div style="display:flex; gap:2px;">${stars}</div>
@@ -1760,13 +1932,20 @@ async function viewUserProfile(email, displayName, avatar) {
     const userDoc = await db.collection('users_access').doc(email.toLowerCase()).get();
     const data = userDoc.data() || {};
     const role = data.role || 'student';
-    const name = data.displayName || displayName || email.split('@')[0];
+    const name = resolveUserName(data) || email.split('@')[0];
+    const isNewUser = !resolveUserName(data) && !data.photoURL;
     const roleLabels = { master:'👑 مشرف عام', student:'🎓 طالب' };
+
+    // أفاتار بالمساعد الموحّد
+    const profileAvatarHtml = buildAvatarHtml(
+        data,
+        email,
+        'width:56px;height:56px;border-radius:14px;border:2px solid #c5a059;flex-shrink:0;font-size:22px;'
+    );
+
     const watchedDoc = await db.collection('watched').doc(email.toLowerCase()).get();
     const allWatched = watchedDoc.data()?.lessons || [];
     const watchedSet = new Set(allWatched);
-    // نستخدم photoURL المخزّن أو الممرّر — أفاتار المزوّد الفعلي
-    const avatarUrl = avatar || data.photoURL || '';
 
     const gradesToShow = role === 'master'
         ? ['1-mid','2-mid','3-mid','1-sec','2-sec','3-sec']
@@ -1804,10 +1983,12 @@ async function viewUserProfile(email, displayName, avatar) {
         html: `
         <div style="font-family:'Cairo',sans-serif;direction:rtl;text-align:right;max-height:70vh;overflow-y:auto;">
             <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;">
-                <img src="${avatarUrl}" referrerpolicy="no-referrer" style="width:56px;height:56px;border-radius:14px;border:2px solid #c5a059;object-fit:cover;flex-shrink:0;"
-                     onerror="this.onerror=null;this.src=''">
+                ${profileAvatarHtml}
                 <div style="min-width:0;">
-                    <p style="margin:0;color:white;font-weight:900;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${name}</p>
+                    <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-bottom:2px;">
+                        <p style="margin:0;color:${isNewUser?'rgba(255,255,255,0.5)':'white'};font-weight:${isNewUser?'600':'900'};font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${isNewUser?'font-style:italic;':''}">${name}</p>
+                        ${isNewUser ? '<span style="background:rgba(100,116,139,0.2);color:rgba(255,255,255,0.4);font-size:8px;padding:1px 6px;border-radius:10px;flex-shrink:0;">لم يسجّل دخول بعد</span>' : ''}
+                    </div>
                     <p style="margin:3px 0 0;color:rgba(255,255,255,0.4);font-size:10px;overflow:hidden;text-overflow:ellipsis;">${email}</p>
                     <span style="font-size:11px;color:#c5a059;font-weight:700;">${roleLabels[role]||role}</span>
                 </div>
@@ -1895,30 +2076,38 @@ function renderStudentsList(students, watchedMap) {
 
     let html = '';
     students.forEach(s => {
-        // الاسم: displayName المخصص أو googleName أو الإيميل كاملاً (لا نقطع عند @)
-        const name = s.displayName || s.googleName || s.email;
-        // الصورة الحقيقية من Google — بدون توليد أفاتار مخصص
-        const avatarUrl = s.photoURL || '';
+        // الاسم والأفاتار بمنطق موحّد
+        const resolvedName = resolveUserName(s);
+        const isNewUser    = !resolvedName && !s.photoURL;
+        const displayName  = resolvedName || (isNewUser ? 'مستخدم جديد' : s.email);
+
+        const avatarHtml = buildAvatarHtml(
+            s,
+            s.email,
+            'width:40px;height:40px;border-radius:11px;border:1px solid rgba(197,160,89,0.25);flex-shrink:0;'
+        );
+
         const count = watchedMap?.[s.email] ?? 0;
         const gradeNames = (s.allowedGrades || []).map(g => ({
             '1-mid':'إعدادي١','2-mid':'إعدادي٢','3-mid':'إعدادي٣',
             '1-sec':'ثانوي١','2-sec':'ثانوي٢','3-sec':'ثانوي٣'
         }[g] || g)).join(' · ');
-        const safeName = name.replace(/'/g, "\\'");
-        const safeAvatar = avatarUrl.replace(/'/g, "\\'");
+        const safeName   = displayName.replace(/'/g, "\\'");
+        const safeAvatar = (s.photoURL || '').replace(/'/g, "\\'");
 
         html += `
         <div onclick="showStudentWatchedDetails('${s.email}','${safeName}','${safeAvatar}')"
              style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;cursor:pointer;transition:all 0.2s;"
              onmouseover="this.style.borderColor='rgba(197,160,89,0.3)';this.style.background='rgba(197,160,89,0.04)'"
              onmouseout="this.style.borderColor='rgba(255,255,255,0.06)';this.style.background='rgba(255,255,255,0.03)'"
-             data-name="${name.toLowerCase()}" data-email="${s.email.toLowerCase()}">
-            <img src="${avatarUrl}" referrerpolicy="no-referrer"
-                 style="width:40px;height:40px;border-radius:11px;object-fit:cover;border:1px solid rgba(197,160,89,0.25);flex-shrink:0;"
-                 onerror="this.onerror=null;this.src=''">
+             data-name="${displayName.toLowerCase()}" data-email="${s.email.toLowerCase()}">
+            ${avatarHtml}
             <div style="flex:1;min-width:0;">
-                <p style="color:white;font-family:'Cairo',sans-serif;font-size:12px;font-weight:900;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${name}</p>
-                <p style="color:rgba(255,255,255,0.3);font-family:'Cairo',sans-serif;font-size:9px;margin:2px 0 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:ltr;text-align:right;">${s.email}</p>
+                <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-bottom:1px;">
+                    <p style="color:${isNewUser?'rgba(255,255,255,0.4)':'white'};font-family:'Cairo',sans-serif;font-size:12px;font-weight:${isNewUser?'600':'900'};margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${isNewUser?'font-style:italic;':''}">${displayName}</p>
+                    ${isNewUser ? '<span style="background:rgba(100,116,139,0.2);color:rgba(255,255,255,0.4);font-size:8px;padding:1px 5px;border-radius:10px;flex-shrink:0;">جديد</span>' : ''}
+                </div>
+                <p style="color:rgba(255,255,255,0.3);font-family:'Cairo',sans-serif;font-size:9px;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:ltr;text-align:right;">${s.email}</p>
                 ${gradeNames ? `<p style="color:rgba(197,160,89,0.7);font-family:'Cairo',sans-serif;font-size:9px;font-weight:700;margin:2px 0 0;">${gradeNames}</p>` : ''}
             </div>
             <div style="text-align:center;flex-shrink:0;min-width:36px;">
@@ -1959,9 +2148,17 @@ async function showStudentWatchedDetails(email, name, avatar) {
         ]);
 
         const userData = userDoc.data() || {};
-        const resolvedName = userData.displayName || userData.googleName || name || email;
+        const resolvedName   = resolveUserName(userData) || name || email;
+        const isNewUser      = !resolveUserName(userData) && !userData.photoURL;
         // نستخدم photoURL المخزّن — أفاتار المزوّد الفعلي بدون توليد بديل
-        const resolvedAvatar = userData.photoURL || avatar || '';
+        const resolvedAvatar = userData.photoURL || '';
+
+        // بناء أفاتار الرأس بالمساعد الموحّد
+        const headerAvatarHtml = buildAvatarHtml(
+            userData,
+            email,
+            'width:50px;height:50px;border-radius:13px;border:2px solid #c5a059;flex-shrink:0;font-size:20px;'
+        );
 
         const watchedIds = new Set(watchedDoc.data()?.lessons || []);
         const allowedGrades = userData.role === 'master'
@@ -1994,11 +2191,12 @@ async function showStudentWatchedDetails(email, name, avatar) {
         <div style="font-family:'Cairo',sans-serif;direction:rtl;text-align:right;">
             <!-- رأس: صورة + معلومات -->
             <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
-                <img src="${resolvedAvatar}" referrerpolicy="no-referrer"
-                     style="width:50px;height:50px;border-radius:13px;border:2px solid #c5a059;object-fit:cover;flex-shrink:0;"
-                     onerror="this.onerror=null;this.src=''">
+                ${headerAvatarHtml}
                 <div style="min-width:0;flex:1;">
-                    <p style="margin:0;color:white;font-weight:900;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${resolvedName}</p>
+                    <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-bottom:1px;">
+                        <p style="margin:0;color:${isNewUser?'rgba(255,255,255,0.5)':'white'};font-weight:${isNewUser?'600':'900'};font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${isNewUser?'font-style:italic;':''}">${resolvedName}</p>
+                        ${isNewUser ? '<span style="background:rgba(100,116,139,0.2);color:rgba(255,255,255,0.4);font-size:8px;padding:1px 6px;border-radius:10px;flex-shrink:0;">لم يسجّل دخول بعد</span>' : ''}
+                    </div>
                     <p style="margin:2px 0;color:rgba(255,255,255,0.3);font-size:9px;overflow:hidden;text-overflow:ellipsis;direction:ltr;text-align:right;">${email}</p>
                     ${gradeNames ? `<p style="margin:2px 0;color:rgba(197,160,89,0.8);font-size:9px;font-weight:700;">${gradeNames}</p>` : ''}
                 </div>
