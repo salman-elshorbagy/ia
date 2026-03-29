@@ -512,7 +512,10 @@ function createCard(item, type) {
             markWatched(lessonId);
         };
     } else {
-        card.onclick = () => openImageViewer(item.url, lessonId, item.title);
+        card.onclick = () => {
+            openImageViewer(item.url, lessonId, item.title);
+            markWatched(lessonId); // ✅ نفس منطق الفيديو — تسجيل المشاهدة عند فتح الصورة
+        };
     }
 
     return card;
