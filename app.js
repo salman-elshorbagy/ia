@@ -1162,6 +1162,7 @@ function closePlayer() {
         commentsUnsubscribe = null;
     }
     _repliesCache = {};
+    _openReplies = new Set();
 
     if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock();
     unlockBodyScroll();
@@ -1410,7 +1411,14 @@ async function saveDisplayName() {
     if (!user) return;
     await db.collection('users_access').doc(user.email.toLowerCase())
         .set({ displayName: newName }, { merge: true });
+
+    // تحديث فوري في البروفايل
     document.getElementById('profile-name').innerText = newName;
+
+    // تحديث فوري في الـ Top Bar (أول اسم فقط بسبب المساحة)
+    const nameSpan = document.getElementById('user-first-name');
+    if (nameSpan) nameSpan.innerText = newName.split(' ')[0];
+
     showToast('تم حفظ الاسم ✅');
 }
 
@@ -1576,12 +1584,15 @@ let commentsRenderVersion = 0;
 // كاش الردود لكل تعليق — يُخزّن مصفوفة HTML strings لكل commentId
 let _repliesCache = {};
 const REPLIES_PAGE_SIZE = 10;
+// الـ threads المفتوحة — تبقى مفتوحة عبر عمليات الـ re-render
+let _openReplies = new Set();
 
 function listenComments(lessonId) {
     if (commentsUnsubscribe) commentsUnsubscribe();
-    // إعادة ضبط العداد والكاش لما بنبدأ listener جديد
+    // إعادة ضبط العداد والكاش وحالة الفتح لما بنبدأ listener جديد
     commentsRenderVersion = 0;
     _repliesCache = {};
+    _openReplies = new Set();
 
     commentsUnsubscribe = db.collection('comments').doc(lessonId)
         .collection('messages')
@@ -1680,7 +1691,7 @@ async function doRenderComments(lessonId, snap) {
                         </div>
                         ${quoteBox}
                         <p style="color:rgba(255,255,255,0.78);font-family:'Cairo',sans-serif;font-size:11px;margin:0 0 5px;line-height:1.55;">${r.text}</p>
-                        <button onclick="startReply('${doc.id}','${escapedRName}','${escapedRText}')"
+                        <button onclick="startReply('${doc.id}','${escapedRName}','${escapedRText}','${rDoc.id}')"
                             style="background:none;border:none;color:rgba(197,160,89,0.5);font-family:'Cairo',sans-serif;font-size:10px;font-weight:700;cursor:pointer;padding:0;display:flex;align-items:center;gap:3px;">
                             <i class="fas fa-reply" style="font-size:9px;"></i> رد
                         </button>
@@ -1747,6 +1758,35 @@ async function doRenderComments(lessonId, snap) {
         countEl.innerText = totalCount;
         list.innerHTML = html;
 
+        // *** إصلاح Issue 3: استعادة الـ threads المفتوحة بعد كل re-render ***
+        // نأخذ نسخة من الـ Set قبل الاستعادة لتجنب أي تعارض
+        const openIds = [..._openReplies];
+        openIds.forEach(commentId => {
+            if (_repliesCache[commentId]?.length > 0) {
+                // الـ container بعد الرسم دايماً display:none
+                // نفتحه مرة تانية بشكل صامت بدون ما نغير _openReplies
+                const container = document.getElementById(`replies-container-${commentId}`);
+                const btn = document.getElementById(`replies-toggle-btn-${commentId}`);
+                if (!container || !btn) return;
+                const replies = _repliesCache[commentId] || [];
+                const total = replies.length;
+                container.innerHTML = replies.slice(0, REPLIES_PAGE_SIZE).join('');
+                container.style.display = 'block';
+                btn.innerHTML = '<i class="fas fa-chevron-up" style="font-size:9px;"></i> إخفاء الردود ↑';
+                btn.style.background = 'rgba(197,160,89,0.15)';
+                const moreBtn = document.getElementById(`replies-more-btn-${commentId}`);
+                if (moreBtn) {
+                    if (total > REPLIES_PAGE_SIZE) {
+                        moreBtn.dataset.offset = REPLIES_PAGE_SIZE;
+                        moreBtn.innerHTML = `<i class="fas fa-ellipsis-h" style="font-size:9px;margin-left:4px;"></i> عرض المزيد (${total - REPLIES_PAGE_SIZE} متبقي)`;
+                        moreBtn.style.display = 'inline-flex';
+                    } else {
+                        moreBtn.style.display = 'none';
+                    }
+                }
+            }
+        });
+
     } catch(e) {
         console.error('Comments render error:', e);
     }
@@ -1787,6 +1827,9 @@ function toggleReplies(commentId) {
         btn.innerHTML = '<i class="fas fa-chevron-up" style="font-size:9px;"></i> إخفاء الردود ↑';
         btn.style.background = 'rgba(197,160,89,0.15)';
 
+        // تسجيل أن هذا الـ thread مفتوح
+        _openReplies.add(commentId);
+
         // زرار "عرض المزيد"
         if (moreBtn) {
             if (total > REPLIES_PAGE_SIZE) {
@@ -1798,9 +1841,12 @@ function toggleReplies(commentId) {
             }
         }
     } else {
-        // إخفاء الردود
+        // إخفاء الردود — فقط لما المستخدم يضغط بنفسه
         container.style.display = 'none';
         container.innerHTML = '';
+
+        // تسجيل أن هذا الـ thread مغلق
+        _openReplies.delete(commentId);
 
         btn.innerHTML = `<i class="fas fa-comment-dots" style="font-size:9px;"></i> عرض ${total} ${total === 1 ? 'رد' : 'ردود'} ↓`;
         btn.style.background = 'rgba(197,160,89,0.08)';
@@ -1839,8 +1885,15 @@ function showMoreReplies(commentId) {
     }
 }
 
-function startReply(commentId, displayName, replyToText) {
-    replyingTo = { commentId, displayName, replyToText: replyToText || '' };
+function startReply(commentId, displayName, replyToText, replyId) {
+    replyingTo = {
+        commentId,
+        displayName,
+        replyToText: replyToText || '',
+        // replyId: الـ ID الفعلي للرد المستهدف (للحذف الـ recursive لاحقاً)
+        // null لو الرد على التعليق الأصلي
+        replyId: replyId || null
+    };
     const input = document.getElementById('comment-input');
     input.placeholder = `ردك على ${displayName}...`;
     input.focus();
@@ -1893,6 +1946,10 @@ async function submitComment() {
             const targetCommentId = replyingTo.commentId;
             const replyToName = replyingTo.displayName || '';
             const replyToText = replyingTo.replyToText || '';
+            // replyToId: مرجع للرد الذي تمت الإجابة عليه (للحذف الـ recursive)
+            const replyToId = replyingTo.replyId || null;
+            // تأكيد إن الـ thread سيكون مفتوح بعد الـ re-render
+            _openReplies.add(targetCommentId);
             cancelReply();
             await db.collection('comments').doc(currentLessonId)
                 .collection('messages').doc(targetCommentId)
@@ -1902,6 +1959,7 @@ async function submitComment() {
                     avatar: user.photoURL || '',
                     replyToName,
                     replyToText,
+                    replyToId,
                     createdAt: firebase.firestore.FieldValue.serverTimestamp()
                 });
             showToast('تم نشر ردك ✅');
@@ -1938,12 +1996,49 @@ async function deleteComment(lessonId, commentId) {
 }
 
 async function deleteReply(lessonId, commentId, replyId) {
-    // *** إصلاح Bug 1 ***
-    // الـ onSnapshot على messages مش بيشتغل لما حاجة في replies بتتحذف
-    // فلازم نعمل reload يدوي بعد الحذف عشان الـ UI يتحدث
-    await db.collection('comments').doc(lessonId)
-        .collection('messages').doc(commentId)
-        .collection('replies').doc(replyId).delete();
+    // ====== حذف Recursive ======
+    // الـ Replies مخزّنة في مستوى واحد (flat) لكن لكل رد replyToId
+    // الذي يشير للرد الذي تمت الإجابة عليه.
+    // عند حذف رد: نحذف هو + كل ردود تشير إليه (direct children)
+    // + أحفادهم (indirect) — وهكذا بشكل recursive.
+
+    try {
+        // جلب كل الردود في هذا الـ thread دفعة واحدة
+        const allRepliesSnap = await db.collection('comments').doc(lessonId)
+            .collection('messages').doc(commentId)
+            .collection('replies').get();
+
+        // بناء مجموعة الـ IDs المطلوب حذفها بشكل recursive
+        const toDelete = new Set([replyId]);
+        let changed = true;
+        // نستمر في البحث حتى لا نجد descendants جديدة
+        while (changed) {
+            changed = false;
+            allRepliesSnap.docs.forEach(doc => {
+                const parentId = doc.data().replyToId;
+                // لو هذا الرد يشير لأحد المحذوفين ولم يُضَف بعد
+                if (parentId && toDelete.has(parentId) && !toDelete.has(doc.id)) {
+                    toDelete.add(doc.id);
+                    changed = true;
+                }
+            });
+        }
+
+        // حذف الكل في batch واحد
+        const batch = db.batch();
+        toDelete.forEach(id => {
+            batch.delete(
+                db.collection('comments').doc(lessonId)
+                  .collection('messages').doc(commentId)
+                  .collection('replies').doc(id)
+            );
+        });
+        await batch.commit();
+
+    } catch(e) {
+        console.error('deleteReply error:', e);
+    }
+
     await forceReloadComments(lessonId);
 }
 
