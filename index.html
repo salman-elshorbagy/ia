@@ -280,8 +280,39 @@
 
             <!-- قائمة إدارة المحتوى -->
             <div class="delete-section">
-                <h4 class="font-black text-red-500 text-xl mb-6 flex items-center gap-3"><i class="fas fa-trash-alt"></i> مركز إدارة المحتوى</h4>
-                <div id="admin-lessons-list" class="space-y-2 max-h-[350px] overflow-y-auto pr-1"></div>
+                <h4 class="font-black text-red-500 text-xl mb-4 flex items-center gap-3">
+                    <i class="fas fa-trash-alt"></i> مركز إدارة المحتوى
+                </h4>
+
+                <!-- بحث وفلترة -->
+                <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;">
+                    <div style="position:relative;">
+                        <span style="position:absolute;top:0;bottom:0;right:0;display:flex;align-items:center;padding-right:11px;pointer-events:none;">
+                            <i class="fas fa-search" style="color:rgba(197,160,89,0.6);font-size:11px;"></i>
+                        </span>
+                        <input id="admin-content-search" type="text" oninput="filterAdminContent()"
+                               placeholder="ابحث في محتوى هذا الصف..."
+                               style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;color:white;font-family:'Cairo',sans-serif;font-size:12px;font-weight:700;padding:9px 38px 9px 12px;outline:none;box-sizing:border-box;transition:border-color 0.2s;"
+                               onfocus="this.style.borderColor='rgba(197,160,89,0.5)'"
+                               onblur="this.style.borderColor='rgba(255,255,255,0.1)'">
+                    </div>
+                    <div style="display:flex;gap:5px;background:rgba(0,0,0,0.3);border-radius:12px;padding:4px;">
+                        <button id="admin-ctab-all"   onclick="setAdminContentTab('all')"
+                                style="flex:1;padding:6px 4px;border-radius:9px;border:none;cursor:pointer;font-family:'Cairo',sans-serif;font-size:10px;font-weight:900;transition:all 0.2s;background:#c5a059;color:#080c14;">
+                            الكل
+                        </button>
+                        <button id="admin-ctab-video" onclick="setAdminContentTab('video')"
+                                style="flex:1;padding:6px 4px;border-radius:9px;border:none;cursor:pointer;font-family:'Cairo',sans-serif;font-size:10px;font-weight:700;transition:all 0.2s;background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.5);">
+                            🎥 فيديوهات
+                        </button>
+                        <button id="admin-ctab-image" onclick="setAdminContentTab('image')"
+                                style="flex:1;padding:6px 4px;border-radius:9px;border:none;cursor:pointer;font-family:'Cairo',sans-serif;font-size:10px;font-weight:700;transition:all 0.2s;background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.5);">
+                            🖼️ صور
+                        </button>
+                    </div>
+                </div>
+
+                <div id="admin-lessons-list" class="space-y-2 max-h-[320px] overflow-y-auto pr-1"></div>
             </div>
         </div>
 

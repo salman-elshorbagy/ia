@@ -80,14 +80,22 @@ auth.onAuthStateChanged(async (user) => {
             document.getElementById('app-header').classList.remove('hidden');
             document.getElementById('app-content').classList.remove('hidden');
 
+            // ======= جلب الاسم المخصص من Firebase وعرضه في الـ Top Bar =======
+            // الأولوية: displayName المخصص ← googleName ← اسم Google الأصلي
+            const customDisplayName = userData.displayName || userData.googleName || user.displayName || '';
+            const nameSpan = document.getElementById('user-first-name');
+            if (nameSpan && customDisplayName) {
+                nameSpan.innerText = customDisplayName.split(' ')[0];
+            }
+
             updateUserProfile(user);
             await loadWatchedLessons();
 
             // ======= حفظ صورة Google ومعلومات المستخدم للاستخدام في لوحة المتابعة =======
-            db.collection("users_access").doc(userEmail).set({
-                photoURL: user.photoURL || '',
-                googleName: user.displayName || ''
-            }, { merge: true }).catch(() => {});
+            // نحفظ googleName فقط لو مش موجود عشان ما نكتبش فوق displayName المخصص
+            const updatePayload = { photoURL: user.photoURL || '' };
+            if (!userData.googleName) updatePayload.googleName = user.displayName || '';
+            db.collection("users_access").doc(userEmail).set(updatePayload, { merge: true }).catch(() => {});
 
             // ضبط زرار لوحة المدرس - فقط للمشرف العام
             const adminBtn = document.querySelector('button[onclick="checkAdmin()"]');
@@ -164,16 +172,12 @@ auth.onAuthStateChanged(async (user) => {
 function updateUserProfile(user) {
     const avatarImg = document.getElementById('user-avatar');
     if (avatarImg) {
-        // referrerPolicy فقط — بدون crossOrigin لأن Google Photos تفشل معه
-        // photoURL من Google هو أفاتار المزوّد الفعلي (ملوّن أو مخصص)
         avatarImg.referrerPolicy = "no-referrer";
         avatarImg.src = user.photoURL || '';
         avatarImg.onerror = function() { this.onerror = null; this.src = ''; };
     }
-    const nameSpan = document.getElementById('user-first-name');
-    if (nameSpan && user.displayName) {
-        nameSpan.innerText = user.displayName.split(' ')[0];
-    }
+    // لا نكتب الاسم هنا — الاسم يتحدد في onAuthStateChanged بعد جلبه من Firebase
+    // عشان نضمن إن الاسم المخصص هو اللي يظهر مش اسم Google الأصلي
 }
 
 // ============================================
@@ -588,6 +592,11 @@ function loadAdminLessons() {
     const list = document.getElementById('admin-lessons-list');
     const targetGrade = adminCurrentGrade || s_grade || '1-sec';
 
+    // إعادة ضبط البحث والفلتر عند تغيير الصف
+    const searchEl = document.getElementById('admin-content-search');
+    if (searchEl) searchEl.value = '';
+    setAdminContentTab('all', false); // بدون إعادة render
+
     // إلغاء الـ listener السابق
     if (adminLessonsUnsubscribe) {
         adminLessonsUnsubscribe();
@@ -599,49 +608,116 @@ function loadAdminLessons() {
     adminLessonsUnsubscribe = db.collection("lessons")
         .orderBy("createdAt", "desc")
         .onSnapshot(snap => {
-            let h = "";
-            let count = 0;
+            // تخزين البيانات الخام للصف الحالي
+            adminRawLessons = [];
             snap.forEach(doc => {
                 const data = doc.data();
                 if (data.grade === targetGrade) {
-                    count++;
-                    const typeIcon = data.type === 'image' ? '🖼️' : '🎥';
-                    // حساب الوقت
-                    let timeStr = '';
-                    if (data.createdAt?.toDate) {
-                        try { timeStr = formatTimeAgo(data.createdAt.toDate()); } catch(e) {}
-                    }
-                    const escapedTitle = data.title.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-                    const escapedUrl = data.url.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-                    h += `
+                    adminRawLessons.push({ id: doc.id, ...data });
+                }
+            });
+            renderAdminLessons();
+        });
+}
+
+// ============================================
+//  بيانات الأدمن الخام + حالة الفلتر
+// ============================================
+let adminRawLessons = [];
+let adminContentTab = 'all';
+
+function setAdminContentTab(tab, doRender = true) {
+    adminContentTab = tab;
+    ['all', 'video', 'image'].forEach(t => {
+        const btn = document.getElementById(`admin-ctab-${t}`);
+        if (!btn) return;
+        if (t === tab) {
+            btn.style.background = '#c5a059';
+            btn.style.color = '#080c14';
+            btn.style.fontWeight = '900';
+        } else {
+            btn.style.background = 'rgba(255,255,255,0.05)';
+            btn.style.color = 'rgba(255,255,255,0.5)';
+            btn.style.fontWeight = '700';
+        }
+    });
+    if (doRender) renderAdminLessons();
+}
+
+function filterAdminContent() {
+    renderAdminLessons();
+}
+
+function renderAdminLessons() {
+    const list = document.getElementById('admin-lessons-list');
+    if (!list) return;
+
+    const query = (document.getElementById('admin-content-search')?.value || '').trim().toLowerCase();
+
+    // فلترة حسب التاب والبحث
+    const filtered = adminRawLessons.filter(item => {
+        const matchType = adminContentTab === 'all'
+            || (adminContentTab === 'video' && item.type !== 'image')
+            || (adminContentTab === 'image' && item.type === 'image');
+        const matchQuery = !query || item.title.toLowerCase().includes(query);
+        return matchType && matchQuery;
+    });
+
+    if (filtered.length === 0) {
+        const msg = query
+            ? `لا يوجد نتائج لـ "${query}"`
+            : 'لا توجد محتويات لهذا الصف حالياً';
+        list.innerHTML = `<div style="text-align:center; padding:20px; color:rgba(255,255,255,0.3); font-size:12px; font-family:'Cairo',sans-serif;">${msg}</div>`;
+        return;
+    }
+
+    let h = '';
+    filtered.forEach(item => {
+        const typeIcon = item.type === 'image' ? '🖼️' : '🎥';
+        let timeStr = '';
+        if (item.createdAt?.toDate) {
+            try { timeStr = formatTimeAgo(item.createdAt.toDate()); } catch(e) {}
+        }
+        const escapedTitle = item.title.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        const escapedUrl   = item.url.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+
+        // تمييز كلمة البحث
+        let displayTitle = item.title;
+        if (query) {
+            const idx = item.title.toLowerCase().indexOf(query);
+            if (idx !== -1) {
+                displayTitle = item.title.substring(0, idx)
+                    + `<mark style="background:rgba(197,160,89,0.3);color:#c5a059;border-radius:3px;padding:0 2px;">${item.title.substring(idx, idx + query.length)}</mark>`
+                    + item.title.substring(idx + query.length);
+            }
+        }
+
+        h += `
 <div style="display:flex; align-items:center; gap:8px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); padding:8px 10px; border-radius:10px; margin-bottom:6px;">
     <span style="font-size:14px; flex-shrink:0;">${typeIcon}</span>
     <div style="flex:1; min-width:0; overflow:hidden;">
-        <p style="color:white; font-size:11px; font-weight:700; margin:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${data.title}</p>
+        <p style="color:white; font-size:11px; font-weight:700; margin:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${displayTitle}</p>
         ${timeStr ? `<span style="color:rgba(255,255,255,0.25);font-size:9px;font-family:'Cairo',sans-serif;">${timeStr}</span>` : ''}
     </div>
     <div style="display:flex; gap:6px; flex-shrink:0;">
-        <button onclick="prepareEditLesson('${doc.id}', '${escapedTitle}', '${escapedUrl}', '${data.grade}', '${data.type || 'video'}')"
+        <button onclick="prepareEditLesson('${item.id}', '${escapedTitle}', '${escapedUrl}', '${item.grade}', '${item.type || 'video'}')"
                 style="background:rgba(59,130,246,0.2); color:#60a5fa; border:1px solid rgba(59,130,246,0.3); padding:4px 10px; border-radius:6px; font-size:10px; font-weight:700; cursor:pointer; white-space:nowrap; transition:all 0.2s;"
                 onmouseover="this.style.background='rgba(59,130,246,0.4)'" onmouseout="this.style.background='rgba(59,130,246,0.2)'">
             <i class="fas fa-pen"></i> تعديل
         </button>
-        <button onclick="deleteDoc('${doc.id}')"
+        <button onclick="deleteDoc('${item.id}')"
                 style="background:rgba(239,68,68,0.1); color:#ef4444; border:1px solid rgba(239,68,68,0.25); width:30px; height:30px; border-radius:6px; font-size:11px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.2s;"
                 onmouseover="this.style.background='rgba(239,68,68,0.3)'" onmouseout="this.style.background='rgba(239,68,68,0.1)'">
             <i class="fas fa-trash-alt"></i>
         </button>
     </div>
 </div>`;
-                }
-            });
-            if (count === 0) {
-                list.innerHTML = `<div style="text-align:center; padding:20px; color:rgba(255,255,255,0.3); font-size:13px; font-family:'Cairo',sans-serif;">لا توجد محتويات لهذا الصف حالياً</div>`;
-            } else {
-                list.innerHTML = h;
-            }
-        });
+    });
+
+    list.innerHTML = h;
 }
+
+
 
 // ============================================
 //  تبديل الصف داخل لوحة الأدمن
@@ -1418,17 +1494,28 @@ async function saveDisplayName() {
     if (!newName) return showToast('اكتب اسمك الأول!', 'warning');
     const user = auth.currentUser;
     if (!user) return;
-    await db.collection('users_access').doc(user.email.toLowerCase())
-        .set({ displayName: newName }, { merge: true });
 
-    // تحديث فوري في البروفايل
-    document.getElementById('profile-name').innerText = newName;
+    const btn = document.querySelector('button[onclick="saveDisplayName()"]');
+    if (btn) { btn.disabled = true; btn.innerText = '...'; }
 
-    // تحديث فوري في الـ Top Bar (أول اسم فقط بسبب المساحة)
-    const nameSpan = document.getElementById('user-first-name');
-    if (nameSpan) nameSpan.innerText = newName.split(' ')[0];
+    try {
+        await db.collection('users_access').doc(user.email.toLowerCase())
+            .set({ displayName: newName }, { merge: true });
 
-    showToast('تم حفظ الاسم ✅');
+        // ١. تحديث البروفايل
+        const profileName = document.getElementById('profile-name');
+        if (profileName) profileName.innerText = newName;
+
+        // ٢. تحديث الـ Top Bar (أول كلمة فقط)
+        const nameSpan = document.getElementById('user-first-name');
+        if (nameSpan) nameSpan.innerText = newName.split(' ')[0];
+
+        showToast('تم حفظ الاسم ✅');
+    } catch(e) {
+        showToast('حدث خطأ أثناء الحفظ', 'error');
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerText = 'حفظ'; }
+    }
 }
 
 // ============================================
