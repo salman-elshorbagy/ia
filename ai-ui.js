@@ -191,7 +191,8 @@ function aiRenderMessages() {
     }
     wrap.innerHTML = '';
     aiActiveChat.messages.forEach(msg => aiAppendMsgEl(msg, false));
-    setTimeout(() => { wrap.scrollTop = wrap.scrollHeight; }, 50);
+    // scroll للأسفل عند التحميل الأول فقط
+    setTimeout(() => { wrap.scrollTop = wrap.scrollHeight; }, 60);
 }
 
 function aiEmptyStateHTML() {
@@ -226,20 +227,19 @@ function aiAppendMsgEl(msg, scroll = true) {
 
     const div = document.createElement('div');
     div.className = `ai-msg ai-msg-${msg.role}`;
+    div.dataset.msgId = msg.ts || Date.now();
 
     const time        = new Date(msg.ts).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
     const isUser      = msg.role === 'user';
     const avatarClass = isUser ? 'ai-msg-avatar-user' : 'ai-msg-avatar-ai';
 
-    // صورة المستخدم من حسابه
     let avatarInner = '';
     if (isUser) {
         const userPhoto = auth.currentUser?.photoURL;
         if (userPhoto) {
             avatarInner = `<img src="${userPhoto}" referrerpolicy="no-referrer"
                 style="width:32px;height:32px;border-radius:10px;object-fit:cover;display:block;"
-                onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-                <span style="display:none;width:100%;height:100%;align-items:center;justify-content:center;"><i class="fas fa-user-graduate"></i></span>`;
+                onerror="this.style.display='none'">`;
         } else {
             avatarInner = '<i class="fas fa-user-graduate"></i>';
         }
@@ -247,15 +247,35 @@ function aiAppendMsgEl(msg, scroll = true) {
         avatarInner = '<i class="fas fa-robot"></i>';
     }
 
+    // أدوات الرسالة
+    const toolsHtml = isUser
+        ? `<div class="ai-msg-tools">
+               <button class="ai-tool-btn" onclick="aiCopyMessage(this)" title="نسخ"><i class="fas fa-copy"></i></button>
+               <button class="ai-tool-btn ai-tool-edit" onclick="aiEditMessage(this)" title="تعديل وإعادة توليد"><i class="fas fa-pen"></i></button>
+           </div>`
+        : `<div class="ai-msg-tools">
+               <button class="ai-tool-btn" onclick="aiCopyMessage(this)" title="نسخ"><i class="fas fa-copy"></i></button>
+           </div>`;
+
     div.innerHTML = `
         <div class="ai-msg-avatar ${avatarClass}">${avatarInner}</div>
         <div class="ai-msg-body">
             <div class="ai-msg-bubble">${aiFormatText(msg.content)}</div>
-            <div class="ai-msg-time">${time}</div>
+            <div class="ai-msg-footer">
+                <div class="ai-msg-time">${time}</div>
+                ${toolsHtml}
+            </div>
         </div>`;
 
     wrap.appendChild(div);
-    if (scroll) setTimeout(() => { wrap.scrollTop = wrap.scrollHeight; }, 30);
+
+    // scroll ذكي: فقط لو المستخدم في الأسفل أصلاً
+    if (scroll) {
+        const atBottom = wrap.scrollHeight - wrap.scrollTop - wrap.clientHeight < 80;
+        if (atBottom) setTimeout(() => { wrap.scrollTop = wrap.scrollHeight; }, 30);
+    }
+
+    return div;
 }
 
 // ─── Typing indicator ────────────────────────────────────
@@ -397,41 +417,53 @@ function aiShowToast(msg, type = 'success') {
     toast._t = setTimeout(() => { toast.className = 'ai-toast'; }, 3000);
 }
 
-// ─── Format text — مع روابط قابلة للنقر + نسخ ──────────
+// ─── Format text — آمن ومنظم ────────────────────────────
 function aiFormatText(text) {
-    let s = (text || '')
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*(.*?)\*/g, '<em>$1</em>')
-        .replace(/`(.*?)`/g, '<code>$1</code>')
-        .replace(/\n/g, '<br>');
+    if (!text) return '';
 
-    // ── روابط واتس آب wa.me (تأتي قبل معالجة http) ──
-    // مثال: wa.me/201014401852 أو https://wa.me/201014401852
-    s = s.replace(
-        /(?:https?:\/\/)?wa\.me\/([\d]+)/g,
-        (match, num) => `<a href="https://wa.me/${num}" target="_blank" rel="noopener noreferrer"
-            style="display:inline-flex;align-items:center;gap:5px;background:rgba(37,211,102,0.12);border:1px solid rgba(37,211,102,0.3);color:#25D366;border-radius:20px;padding:3px 10px;font-size:12px;text-decoration:none;margin:2px;">
-            <i class="fab fa-whatsapp"></i> واتساب</a>`
-    );
+    // الخطوة 1: استخراج الأرقام/الروابط وتبديلها بـ tokens قبل الـ escaping
+    const tokens = [];
+    let processed = text;
 
-    // ── روابط عامة (http/https) ──
-    s = s.replace(
-        /(https?:\/\/[^\s<"'&]+)/g,
-        (url) => {
-            const label = url.length > 40 ? url.slice(0, 37) + '...' : url;
-            return `<a href="${url}" target="_blank" rel="noopener noreferrer"
-                style="color:#818cf8;text-decoration:underline;word-break:break-all;">${label}</a>`;
-        }
-    );
+    // wa.me links أولاً
+    processed = processed.replace(/https?:\/\/wa\.me\/([\d]+)/g, (m, num) => {
+        const i = tokens.length;
+        tokens.push({ type: 'wa', num });
+        return `\x01T${i}\x01`;
+    });
 
-    // ── أرقام مصرية (01xxxxxxxxx) → واتساب ──
-    s = s.replace(
-        /\b(01[0-9]{9})\b/g,
-        (num) => `<a href="https://wa.me/2${num}" target="_blank" rel="noopener noreferrer"
-            style="display:inline-flex;align-items:center;gap:5px;background:rgba(37,211,102,0.12);border:1px solid rgba(37,211,102,0.3);color:#25D366;border-radius:20px;padding:3px 10px;font-size:12px;text-decoration:none;margin:2px;">
-            <i class="fab fa-whatsapp"></i> ${num}</a>`
-    );
+    // أرقام مصرية خام (01xxxxxxxxx) — بعد ما استخرجنا wa.me
+    processed = processed.replace(/\b(01[0-9]{9})\b/g, (m, num) => {
+        const i = tokens.length;
+        tokens.push({ type: 'phone', num });
+        return `\x01T${i}\x01`;
+    });
+
+    // الخطوة 2: HTML escape + markdown
+    let s = processed
+        .replace(/&/g,  '&amp;')
+        .replace(/</g,  '&lt;')
+        .replace(/>/g,  '&gt;')
+        .replace(/\*\*(.*?)\*\*/gs, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/gs,     '<em>$1</em>')
+        .replace(/`(.*?)`/g,        '<code>$1</code>')
+        .replace(/\n/g,             '<br>');
+
+    // الخطوة 3: روابط عامة (https — غير wa.me)
+    s = s.replace(/(https?:\/\/(?!wa\.me)[^\s<"'&\x01]+)/g, url => {
+        const label = url.length > 45 ? url.slice(0, 42) + '…' : url;
+        return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="ai-link">${label}</a>`;
+    });
+
+    // الخطوة 4: إعادة الـ tokens كأزرار واتساب
+    s = s.replace(/\x01T(\d+)\x01/g, (m, idx) => {
+        const t = tokens[parseInt(idx)];
+        if (!t) return m;
+        const fullNum    = t.type === 'phone' ? '2' + t.num : t.num;
+        const displayNum = t.type === 'phone' ? t.num
+            : t.num.startsWith('2') ? '0' + t.num.slice(2) : t.num;
+        return `<a href="https://wa.me/${fullNum}" target="_blank" rel="noopener noreferrer" class="ai-wa-btn"><i class="fab fa-whatsapp"></i> ${displayNum}</a>`;
+    });
 
     return s;
 }
@@ -783,6 +815,7 @@ function aiShowChat() {
 
 // ─── أنيميشن الكتابة ─────────────────────────────────────
 async function aiAnimateTyping(bubbleEl, fullText) {
+    const wrap   = document.getElementById('ai-messages-wrap');
     const tokens = fullText.match(/[\u0600-\u06FF\w]+|\s+|[^\u0600-\u06FF\w\s]/g) || [fullText];
     let built = '';
     bubbleEl.innerHTML = '<span class="ai-type-cursor">▌</span>';
@@ -791,18 +824,23 @@ async function aiAnimateTyping(bubbleEl, fullText) {
         built += tokens[i];
         bubbleEl.innerHTML = aiFormatText(built) + '<span class="ai-type-cursor">▌</span>';
         const t = tokens[i];
-        let delay = 20;
-        if (/[.!?؟،\n]/.test(t)) delay = 75;
-        else if (/^\s+$/.test(t))  delay = 6;
+        let delay = 18;
+        if (/[.!?؟،\n]/.test(t)) delay = 65;
+        else if (/^\s+$/.test(t))  delay = 5;
         await new Promise(r => setTimeout(r, delay));
-        if (i % 8 === 0) {
-            const wrap = document.getElementById('ai-messages-wrap');
-            if (wrap) wrap.scrollTop = wrap.scrollHeight;
+
+        // scroll ذكي فقط — لا نجبر المستخدم
+        if (i % 10 === 0 && wrap) {
+            const atBottom = wrap.scrollHeight - wrap.scrollTop - wrap.clientHeight < 80;
+            if (atBottom) wrap.scrollTop = wrap.scrollHeight;
         }
     }
     bubbleEl.innerHTML = aiFormatText(fullText);
-    const wrap = document.getElementById('ai-messages-wrap');
-    if (wrap) wrap.scrollTop = wrap.scrollHeight;
+    // scroll أخير ذكي
+    if (wrap) {
+        const atBottom = wrap.scrollHeight - wrap.scrollTop - wrap.clientHeight < 80;
+        if (atBottom) wrap.scrollTop = wrap.scrollHeight;
+    }
 }
 
 async function aiAppendMsgAnimated(msg) {
@@ -812,20 +850,32 @@ async function aiAppendMsgAnimated(msg) {
 
     const div = document.createElement('div');
     div.className = 'ai-msg ai-msg-assistant';
+    div.dataset.msgId = msg.ts || Date.now();
     const time = new Date(msg.ts).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
     div.innerHTML = `
         <div class="ai-msg-avatar ai-msg-avatar-ai"><i class="fas fa-robot"></i></div>
         <div class="ai-msg-body">
             <div class="ai-msg-bubble" id="ai-anim-bubble-${msg.ts}"></div>
-            <div class="ai-msg-time">${time}</div>
+            <div class="ai-msg-footer">
+                <div class="ai-msg-time">${time}</div>
+                <div class="ai-msg-tools">
+                    <button class="ai-tool-btn" onclick="aiCopyMessage(this)" title="نسخ"><i class="fas fa-copy"></i></button>
+                </div>
+            </div>
         </div>`;
     wrap.appendChild(div);
 
     const bubbleEl = div.querySelector('.ai-msg-bubble');
     await aiAnimateTyping(bubbleEl, msg.content);
 
+    // كشف أسئلة التفاعل
     const quizOptions = aiDetectQuiz(msg.content);
-    if (quizOptions) aiRenderQuizOptions(div, quizOptions);
+    if (quizOptions) {
+        aiRenderQuizOptions(div, quizOptions);
+    } else {
+        const isTF = aiDetectTrueFalse(msg.content);
+        if (isTF) aiRenderTrueFalseOptions(div);
+    }
 }
 
 // ─── أسئلة الاختيار المتعدد ─────────────────────────────
@@ -1085,9 +1135,230 @@ function aiStartVoice() {
 
 function aiStopVoice() {
     aiIsRecording      = false;
-    aiPreRecordingText = ''; // تنظيف
+    aiPreRecordingText = '';
     const micBtn = document.getElementById('ai-mic-btn');
     if (micBtn) micBtn.classList.remove('ai-mic-recording');
     try { aiSpeechRecognition?.stop(); } catch(e) {}
     aiSpeechRecognition = null;
 }
+
+// ─── نسخ رسالة ───────────────────────────────────────────
+function aiCopyMessage(btn) {
+    const bubble = btn.closest('.ai-msg-body')?.querySelector('.ai-msg-bubble');
+    if (!bubble) return;
+    // نسخ النص بدون HTML
+    const text = bubble.innerText || bubble.textContent || '';
+    navigator.clipboard.writeText(text).then(() => {
+        aiShowToast('تم النسخ ✅', 'success');
+        const icon = btn.querySelector('i');
+        if (icon) {
+            icon.className = 'fas fa-check';
+            setTimeout(() => { icon.className = 'fas fa-copy'; }, 1500);
+        }
+    }).catch(() => {
+        // fallback
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        aiShowToast('تم النسخ ✅', 'success');
+    });
+}
+
+// ─── تعديل رسالة + إعادة توليد ───────────────────────────
+function aiEditMessage(btn) {
+    if (!aiActiveChat) return;
+    const msgDiv  = btn.closest('.ai-msg');
+    if (!msgDiv) return;
+    const bubble  = msgDiv.querySelector('.ai-msg-bubble');
+    const msgId   = parseInt(msgDiv.dataset.msgId);
+    const msgIdx  = aiActiveChat.messages.findIndex(m => m.ts === msgId);
+    if (msgIdx < 0 || !bubble) return;
+
+    const currentText = aiActiveChat.messages[msgIdx].content || '';
+
+    // حول الـ bubble لـ input
+    const input = document.createElement('textarea');
+    input.className   = 'ai-edit-input';
+    input.value       = currentText;
+    input.rows        = 3;
+    bubble.innerHTML  = '';
+    bubble.appendChild(input);
+    input.focus();
+    input.select();
+
+    const confirmBtn = document.createElement('button');
+    confirmBtn.className = 'ai-edit-confirm-btn';
+    confirmBtn.innerHTML = '<i class="fas fa-paper-plane"></i> إعادة إرسال';
+    confirmBtn.onclick = () => aiConfirmEdit(msgDiv, msgIdx, input.value);
+    bubble.appendChild(confirmBtn);
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'ai-edit-cancel-btn';
+    cancelBtn.innerHTML = '<i class="fas fa-times"></i>';
+    cancelBtn.onclick = () => aiRenderMessages(); // إلغاء — إعادة رسم
+    bubble.appendChild(cancelBtn);
+}
+
+async function aiConfirmEdit(msgDiv, msgIdx, newText) {
+    newText = (newText || '').trim();
+    if (!newText || !aiActiveChat) { aiRenderMessages(); return; }
+
+    const email = auth.currentUser?.email?.toLowerCase();
+    if (!email) return;
+
+    // حذف الرسالة المعدّلة وكل ما بعدها (رد الـ AI القديم)
+    aiActiveChat.messages = aiActiveChat.messages.slice(0, msgIdx);
+    aiSaveChats(email, aiAllChats);
+
+    // إعادة رسم + إرسال الرسالة الجديدة
+    aiRenderMessages();
+    const input = document.getElementById('ai-msg-input');
+    if (input) {
+        input.value = newText;
+        aiAutoResize(input);
+    }
+    await aiSendMessage();
+}
+
+// ─── كشف صح/غلط ──────────────────────────────────────────
+function aiDetectTrueFalse(text) {
+    return /\[TRUE_FALSE\]/.test(text);
+}
+
+// ─── رسم أزرار صح/غلط ────────────────────────────────────
+function aiRenderTrueFalseOptions(parentEl) {
+    const container = document.createElement('div');
+    container.className = 'ai-tf-container';
+
+    const trueBtn  = document.createElement('button');
+    trueBtn.className = 'ai-tf-btn ai-tf-true';
+    trueBtn.innerHTML = '<i class="fas fa-check"></i> صح ✅';
+
+    const falseBtn = document.createElement('button');
+    falseBtn.className = 'ai-tf-btn ai-tf-false';
+    falseBtn.innerHTML = '<i class="fas fa-times"></i> غلط ❌';
+
+    const handler = async (chosen, btn) => {
+        if (container.dataset.answered) return;
+        container.dataset.answered = '1';
+        trueBtn.disabled = falseBtn.disabled = true;
+        trueBtn.classList.add('ai-tf-dim');
+        falseBtn.classList.add('ai-tf-dim');
+        btn.classList.remove('ai-tf-dim');
+        btn.classList.add('ai-tf-selected');
+
+        if (!aiActiveChat) return;
+        const choiceText = chosen === 'true' ? 'إجابتي: صح' : 'إجابتي: غلط';
+        const userMsg = aiAddMessageToChat(aiActiveChat.id, 'user', choiceText);
+        aiAppendMsgEl(userMsg);
+        aiRenderSidebar();
+
+        aiIsLoading = true;
+        const sendBtn = document.getElementById('ai-send-btn');
+        if (sendBtn) sendBtn.disabled = true;
+        aiShowTyping();
+        try {
+            const rawReply = await aiCallAPI(aiActiveChat.messages);
+            aiHideTyping();
+            const isCorrect = rawReply.includes('✅');
+            const isWrong   = rawReply.includes('❌');
+            btn.classList.remove('ai-tf-selected');
+            if (isCorrect)     btn.classList.add('ai-tf-correct');
+            else if (isWrong)  btn.classList.add('ai-tf-wrong');
+            const aiMsg = aiAddMessageToChat(aiActiveChat.id, 'assistant', rawReply);
+            await aiAppendMsgAnimated(aiMsg);
+            aiRenderSidebar();
+        } catch {
+            aiHideTyping();
+            const errMsg = aiAddMessageToChat(aiActiveChat.id, 'assistant', '⚠️ حصلت مشكلة — جرب تاني');
+            aiAppendMsgEl(errMsg);
+        } finally {
+            aiIsLoading = false;
+            if (sendBtn) sendBtn.disabled = false;
+        }
+    };
+
+    trueBtn.addEventListener('click',  () => handler('true',  trueBtn));
+    falseBtn.addEventListener('click', () => handler('false', falseBtn));
+
+    container.appendChild(trueBtn);
+    container.appendChild(falseBtn);
+    parentEl.appendChild(container);
+}
+
+// ─── ميزة "اسأل عن الكلمة" (word selection popup) ─────────
+let _aiWordPopupTimer = null;
+
+function aiInitWordSelection() {
+    const modalEl = document.getElementById('ai-modal');
+    if (!modalEl) return;
+
+    const showPopup = (e) => {
+        clearTimeout(_aiWordPopupTimer);
+        _aiWordPopupTimer = setTimeout(() => {
+            // إزالة popup قديم
+            document.getElementById('ai-word-popup')?.remove();
+
+            const sel  = window.getSelection();
+            const text = sel?.toString()?.trim();
+            if (!text || text.length < 2 || text.length > 200) return;
+
+            // تأكد إن التحديد داخل منطقة رسائل الـ AI
+            const wrap = document.getElementById('ai-messages-wrap');
+            if (!wrap || !sel.anchorNode || !wrap.contains(sel.anchorNode)) return;
+
+            // موضع الـ popup
+            const range = sel.getRangeAt(0);
+            const rect  = range.getBoundingClientRect();
+            const modalRect = modalEl.getBoundingClientRect();
+
+            const popup = document.createElement('div');
+            popup.id    = 'ai-word-popup';
+            popup.className = 'ai-word-popup';
+            popup.innerHTML = `<i class="fas fa-robot"></i> اسأل عن: "${text.length > 30 ? text.slice(0,28)+'…' : text}"`;
+
+            // positioning relative to modal
+            const top  = rect.top  - modalRect.top  - 44;
+            const left = rect.left - modalRect.left + (rect.width / 2);
+            popup.style.cssText = `top:${top}px;left:${left}px;transform:translateX(-50%);`;
+
+            popup.addEventListener('click', (ev) => {
+                ev.stopPropagation();
+                popup.remove();
+                sel.removeAllRanges();
+                const input = document.getElementById('ai-msg-input');
+                if (input) {
+                    input.value = text;
+                    aiAutoResize(input);
+                    input.focus();
+                }
+                aiSendMessage();
+            });
+
+            modalEl.appendChild(popup);
+
+            // إخفاء تلقائي بعد 4 ثواني
+            setTimeout(() => popup.remove(), 4000);
+        }, 300);
+    };
+
+    const hidePopup = (e) => {
+        // لو ضغط خارج الـ popup
+        if (!e.target.closest('#ai-word-popup')) {
+            clearTimeout(_aiWordPopupTimer);
+            setTimeout(() => document.getElementById('ai-word-popup')?.remove(), 150);
+        }
+    };
+
+    document.addEventListener('mouseup',  showPopup);
+    document.addEventListener('touchend', showPopup);
+    document.addEventListener('mousedown', hidePopup);
+}
+
+// تشغيل عند فتح الـ modal
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(aiInitWordSelection, 500);
+});

@@ -950,3 +950,167 @@
     padding: 2px 6px;
     outline: none;
 }
+/* ══════════════════════════════════════════
+   v3 — أدوات الرسائل + صح/غلط + word popup
+   ══════════════════════════════════════════ */
+
+/* ── واتساب Button ── */
+.ai-wa-btn {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: rgba(37,211,102,.12);
+    border: 1px solid rgba(37,211,102,.3);
+    color: #25D366 !important;
+    border-radius: 20px; padding: 3px 12px;
+    font-size: 12px; text-decoration: none !important;
+    margin: 2px; transition: all .18s; cursor: pointer;
+    font-family: 'Cairo', sans-serif; font-weight: 700;
+}
+.ai-wa-btn:hover { background: rgba(37,211,102,.22); transform: translateY(-1px); }
+.ai-wa-btn i { font-size: 14px; }
+
+/* ── رابط عام ── */
+.ai-link {
+    color: #818cf8 !important;
+    text-decoration: underline !important;
+    word-break: break-all;
+}
+
+/* ── message footer ── */
+.ai-msg-footer {
+    display: flex; align-items: center;
+    justify-content: space-between;
+    margin-top: 4px; padding: 0 3px;
+    gap: 6px;
+}
+.ai-msg-user .ai-msg-footer { flex-direction: row-reverse; }
+
+/* ── Message Tools ── */
+.ai-msg-tools {
+    display: flex; gap: 4px;
+    opacity: 0; transition: opacity .2s;
+    flex-shrink: 0;
+}
+.ai-msg:hover .ai-msg-tools { opacity: 1; }
+@media (pointer: coarse) {
+    .ai-msg-tools { opacity: 1; }
+}
+.ai-tool-btn {
+    width: 26px; height: 26px;
+    border-radius: 8px; border: 1px solid rgba(255,255,255,.1);
+    background: rgba(255,255,255,.05);
+    color: rgba(255,255,255,.35);
+    font-size: 11px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all .18s; flex-shrink: 0;
+}
+.ai-tool-btn:hover { background: rgba(197,160,89,.15); color: var(--ai-gold); border-color: var(--ai-border); }
+.ai-tool-btn:active { transform: scale(.9); }
+.ai-tool-edit:hover { background: rgba(59,130,246,.15); color: #60a5fa; border-color: rgba(59,130,246,.3); }
+
+/* ── Edit input ── */
+.ai-edit-input {
+    width: 100%; background: rgba(255,255,255,.06);
+    border: 1px solid rgba(197,160,89,.4);
+    border-radius: 10px; color: white;
+    font-family: 'Cairo', sans-serif;
+    font-size: 13px; padding: 8px 10px;
+    outline: none; resize: none;
+    box-sizing: border-box; direction: rtl;
+    margin-bottom: 6px; display: block;
+}
+.ai-edit-confirm-btn, .ai-edit-cancel-btn {
+    padding: 6px 14px; border-radius: 9px;
+    font-family: 'Cairo', sans-serif;
+    font-size: 11px; font-weight: 700;
+    cursor: pointer; transition: all .18s;
+    display: inline-flex; align-items: center; gap: 5px;
+    margin-left: 6px;
+}
+.ai-edit-confirm-btn {
+    background: linear-gradient(135deg, var(--ai-gold), var(--ai-gold-l));
+    color: #080c14; border: none;
+}
+.ai-edit-confirm-btn:hover { transform: translateY(-1px); }
+.ai-edit-cancel-btn {
+    background: rgba(239,68,68,.1);
+    color: #f87171;
+    border: 1px solid rgba(239,68,68,.25);
+}
+
+/* ── True/False Buttons ── */
+.ai-tf-container {
+    display: flex; gap: 10px;
+    margin-top: 12px; padding: 4px 0;
+    animation: aiSlideUp .3s both;
+}
+.ai-tf-btn {
+    flex: 1; padding: 10px 6px;
+    border-radius: 12px;
+    font-family: 'Cairo', sans-serif;
+    font-size: 13px; font-weight: 900;
+    cursor: pointer; transition: all .2s;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+}
+.ai-tf-true {
+    background: rgba(34,197,94,.1);
+    border: 1px solid rgba(34,197,94,.3);
+    color: #22c55e;
+}
+.ai-tf-false {
+    background: rgba(239,68,68,.1);
+    border: 1px solid rgba(239,68,68,.3);
+    color: #f87171;
+}
+.ai-tf-true:hover:not(:disabled)  { background: rgba(34,197,94,.2); transform: translateY(-2px); }
+.ai-tf-false:hover:not(:disabled) { background: rgba(239,68,68,.2); transform: translateY(-2px); }
+.ai-tf-dim      { opacity: .38; }
+.ai-tf-selected { opacity: 1 !important; border-width: 2px !important; }
+.ai-tf-correct  { background: rgba(34,197,94,.25) !important; border-color: #22c55e !important; animation: aiQuizCorrect .5s both; }
+.ai-tf-wrong    { background: rgba(239,68,68,.2)  !important; border-color: #ef4444 !important; animation: aiQuizWrong  .5s both; }
+
+/* ── Word Selection Popup ── */
+#ai-word-popup {
+    position: absolute;
+    z-index: 9999;
+    background: var(--ai-panel);
+    border: 1px solid var(--ai-border);
+    border-radius: 20px;
+    padding: 7px 14px;
+    font-size: 11px; font-weight: 700;
+    color: var(--ai-gold);
+    font-family: 'Cairo', sans-serif;
+    cursor: pointer;
+    display: flex; align-items: center; gap: 6px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.5);
+    animation: aiWordPopIn .2s cubic-bezier(.16,1,.3,1);
+    white-space: nowrap; max-width: 260px;
+    overflow: hidden; text-overflow: ellipsis;
+    pointer-events: all;
+}
+#ai-word-popup:hover { background: rgba(197,160,89,.18); }
+#ai-word-popup i { color: var(--ai-gold); font-size: 13px; flex-shrink: 0; }
+@keyframes aiWordPopIn {
+    from { opacity: 0; transform: translateX(-50%) translateY(8px) scale(.92); }
+    to   { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+}
+
+/* ── ai-modal position context for popup ── */
+#ai-modal { position: fixed; }
+
+/* ── Top bar fix: ensure header is always visible inside modal ── */
+#ai-full-wrap {
+    display: flex; flex-direction: column;
+    width: 100%; height: 100%;
+    overflow: hidden;
+}
+#ai-header { flex-shrink: 0; position: relative; z-index: 20; }
+#ai-body   { flex: 1; overflow: hidden; }
+
+/* ── Mobile: top bar stays fixed ── */
+@media (max-width: 640px) {
+    #ai-header { position: sticky; top: 0; z-index: 50; }
+    #ai-messages-wrap { overscroll-behavior: contain; }
+    /* اختصار أدوات الرسائل على الموبايل */
+    .ai-msg-tools { opacity: 1; }
+    .ai-tool-btn { width: 28px; height: 28px; }
+}
