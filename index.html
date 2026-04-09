@@ -713,6 +713,20 @@
                 <!-- Input -->
                 <div id="ai-input-bar">
                     <div id="ai-input-wrap">
+                        <!-- زر الإضافة (+) -->
+                        <div class="ai-attach-wrapper">
+                            <button id="ai-attach-btn" onclick="aiToggleAttachMenu()" title="إرفاق صورة">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                            <div id="ai-attach-menu" class="ai-attach-menu">
+                                <button onclick="aiUploadImage()">
+                                    <i class="fas fa-image"></i> رفع صورة
+                                </button>
+                                <button onclick="aiOpenCamera()">
+                                    <i class="fas fa-camera"></i> كاميرا
+                                </button>
+                            </div>
+                        </div>
                         <textarea id="ai-msg-input"
                             placeholder="اسألني أي حاجة في الدروس..."
                             rows="1"

@@ -19,6 +19,26 @@ let aiMasterStudentsCtx = ''; // ملخص الطلاب للـ system prompt (mas
 const AI_MAX_MEMORIES = 20;
 let aiMemories = [];
 
+// ─── تنظيف ردود AI من التشويه ─────────────────────────────
+// يحتفظ بـ: عربية، لاتين أساسي (إنجليزي+أرقام+ترقيم)، emoji، سطر جديد
+function cleanAIResponse(text) {
+    if (!text) return '';
+    return text
+        .replace(/[^\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF\u0020-\u007E\u00A9\u00AE\u2000-\u206F\u2190-\u21FF\u2600-\u27FF\uD800-\uDFFF\n\r\t]/g, '')
+        .replace(/[ \t]{2,}/g, ' ')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+}
+
+// ─── حفظ / استرجاع آخر محادثة مفتوحة ───────────────────
+function aiSaveLastOpenedChat(email, chatId) {
+    try { localStorage.setItem('ai_last_opened_' + email, chatId); } catch {}
+}
+
+function aiGetLastOpenedChat(email) {
+    try { return localStorage.getItem('ai_last_opened_' + email); } catch { return null; }
+}
+
 // ─── localStorage ─────────────────────────────────────────
 function aiStorageKey(email) {
     return `ai_chats_v2_${email}`;
@@ -34,7 +54,27 @@ function aiLoadChats(email) {
 function aiSaveChats(email, chats) {
     try {
         localStorage.setItem(aiStorageKey(email), JSON.stringify(chats));
-    } catch {}
+    } catch (e) {
+        console.error('[AI] localStorage save failed:', e.name, e.message);
+        // لو الـ quota اتعدى: نحاول نحفظ بدون بيانات الصور عشان ما نخسرش التاريخ النصي
+        if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
+            console.warn('[AI] Storage quota exceeded — saving chats without image data as fallback');
+            try {
+                const lean = chats.map(c => ({
+                    ...c,
+                    messages: (c.messages || []).map(m => {
+                        if (!m.imageBase64) return m;
+                        // نحذف بيانات الصورة ونحتفظ بباقي الرسالة
+                        const { imageBase64, imageType, ...rest } = m;
+                        return rest;
+                    })
+                }));
+                localStorage.setItem(aiStorageKey(email), JSON.stringify(lean));
+            } catch (e2) {
+                console.error('[AI] localStorage fallback save also failed:', e2.message);
+            }
+        }
+    }
     aiSyncToFirestore(email, chats).catch(() => {});
 }
 
@@ -171,13 +211,21 @@ function aiRenameChat(chatId, newTitle) {
 }
 
 // ─── إضافة رسالة ─────────────────────────────────────────
-function aiAddMessageToChat(chatId, role, content) {
+function aiAddMessageToChat(chatId, role, content, imageData = null, options = {}) {
     const user = auth.currentUser;
     if (!user) return;
     const email = user.email.toLowerCase();
     const chat  = aiAllChats.find(c => c.id === chatId);
     if (!chat) return;
     const msg = { role, content, ts: Date.now() };
+    // حفظ نوع السؤال (TF) حتى يمكن استعادة الأزرار عند إعادة الرسم
+    if (options.isTF) msg.isTF = true;
+    // حفظ تحليل الصورة لاستخدامه كـ context في الرسائل اللاحقة
+    if (options.imageAnalysis) msg.imageAnalysis = String(options.imageAnalysis).substring(0, 600);
+    if (imageData && imageData.base64) {
+        msg.imageBase64 = imageData.base64;
+        msg.imageType   = imageData.type || 'image/jpeg';
+    }
     chat.messages.push(msg);
     chat.updatedAt = Date.now();
     if (role === 'user' && chat.messages.filter(m => m.role === 'user').length === 1) {
@@ -242,6 +290,25 @@ function aiBuildApiMessages(chatMessages) {
 - المشرف يستطيع رؤية: الإيميل، الاسم، الصف، عدد الدروس المشاهدة.`;
     }
 
+    // ── سياق الصور السابقة — يحافظ على فهم الـ AI للصور عبر الرسائل ──
+    // نجيب آخر 3 رسائل مستخدم فيها صورة ولها تحليل محفوظ
+    const historyImgMsgs = chatMessages
+        .filter(m => m.role === 'user' && m.imageBase64)
+        .slice(-3); // آخر 3 صور بحد أقصى
+
+    if (historyImgMsgs.length > 0) {
+        system += `\n\n══ سياق صور سابقة في المحادثة ══`;
+        historyImgMsgs.forEach((m, i) => {
+            const label = historyImgMsgs.length > 1 ? ` ${i + 1}` : '';
+            if (m.imageAnalysis) {
+                system += `\n• تحليل صورة سابقة${label}: ${m.imageAnalysis}`;
+            } else {
+                system += `\n• كان فيه صورة مرفقة${label} تم تحليلها في رسالة سابقة`;
+            }
+        });
+        system += `\n(لو المستخدم سأل عن صورة سابقة أو أشار إليها، اعتمد على التحليل أعلاه دون طلب إعادة رفعها)`;
+    }
+
     system += `\n══════════════════════════`;
 
     const slice      = chatMessages.slice(-AI_CONFIG.maxMessagesContext);
@@ -253,9 +320,45 @@ function aiBuildApiMessages(chatMessages) {
     ];
 }
 
+// ─── Vision Model (Groq) — تحليل الصور مباشرة بدون CORS ─
+const AI_VISION_MODEL = 'meta-llama/llama-4-scout-17b-16e-instruct';
+
 // ─── استدعاء API ─────────────────────────────────────────
-async function aiCallAPI(chatMessages) {
+async function aiCallAPI(chatMessages, imageData = null) {
     const messages = aiBuildApiMessages(chatMessages);
+
+    // لو في صورة: نضيف الصورة مباشرة في الرسالة الأخيرة بـ vision format
+    if (imageData && imageData.base64) {
+        let lastUserIdx = -1;
+        for (let i = messages.length - 1; i >= 0; i--) {
+            if (messages[i].role === 'user') { lastUserIdx = i; break; }
+        }
+        if (lastUserIdx >= 0) {
+            const originalText = (typeof messages[lastUserIdx].content === 'string'
+                ? messages[lastUserIdx].content
+                : '') || 'حللي الصورة دي وأخبرني بمحتواها بالتفصيل باللغة العربية.';
+
+            // نحوّل الـ content لـ array (OpenAI vision format)
+            messages[lastUserIdx] = {
+                role: 'user',
+                content: [
+                    {
+                        type: 'text',
+                        text: originalText
+                    },
+                    {
+                        type: 'image_url',
+                        image_url: {
+                            url: `data:${imageData.type || 'image/jpeg'};base64,${imageData.base64}`
+                        }
+                    }
+                ]
+            };
+        }
+    }
+
+    // تحديد الموديل: vision model للصور، text model للنص
+    const model = (imageData && imageData.base64) ? AI_VISION_MODEL : AI_CONFIG.model;
 
     let res;
     try {
@@ -264,11 +367,11 @@ async function aiCallAPI(chatMessages) {
             mode:        'cors',
             credentials: 'omit',
             headers: {
-                'Content-Type': 'application/json',
+                'Content-Type':  'application/json',
                 'Authorization': `Bearer ${AI_CONFIG.apiKey}`,
             },
             body: JSON.stringify({
-                model:       AI_CONFIG.model,
+                model,
                 messages,
                 max_tokens:  AI_CONFIG.maxTokens,
                 temperature: AI_CONFIG.temperature,
@@ -299,7 +402,8 @@ async function aiCallAPI(chatMessages) {
         console.error('[AI] Empty/unexpected response:', data);
         throw new Error('EMPTY_RESPONSE');
     }
-    return content;
+    // تنظيف الرد من أي حروف غريبة قبل الإرجاع
+    return cleanAIResponse(content);
 }
 
 // ─── جلب بيانات طالب (للمشرف العام) ──────────────────────
@@ -366,7 +470,14 @@ async function aiInit() {
     aiCurrentUser = user;
     const email = user.email.toLowerCase();
     aiAllChats   = aiLoadChats(email);
-    aiActiveChat = aiAllChats[0] || null;
+
+    // استعادة آخر محادثة فتحها المستخدم (حتى لو ما بعتش فيها)
+    const lastId = aiGetLastOpenedChat(email);
+    if (lastId) {
+        aiActiveChat = aiAllChats.find(c => c.id === lastId) || aiAllChats[0] || null;
+    } else {
+        aiActiveChat = aiAllChats[0] || null;
+    }
 
     // تحميل الذاكرة + بيانات المنصة + الطلاب (للمشرف)
     await Promise.all([

@@ -140,6 +140,9 @@ function aiFinishRename(chatId, newTitle) {
 // ─── اختيار محادثة ───────────────────────────────────────
 function aiSelectChat(chatId) {
     aiActiveChat = aiAllChats.find(c => c.id === chatId) || null;
+    // حفظ آخر محادثة فتحها المستخدم
+    const email = auth.currentUser?.email?.toLowerCase();
+    if (email && aiActiveChat) aiSaveLastOpenedChat(email, chatId);
     aiRenderSidebar();
     aiRenderMessages();
     aiHideAnalytics();
@@ -268,6 +271,25 @@ function aiAppendMsgEl(msg, scroll = true) {
 
     wrap.appendChild(div);
 
+    // ── عرض الصورة المحفوظة عند تحميل التاريخ (إعادة الفتح / Refresh) ──
+    if (isUser && msg.imageBase64) {
+        const imgDataUrl = `data:${msg.imageType || 'image/jpeg'};base64,${msg.imageBase64}`;
+        aiInjectImageIntoBubble(div, imgDataUrl);
+    }
+
+    // ── أزرار MCQ / TF للرسائل المحفوظة (إعادة رسم أو تحميل تاريخ) ──
+    if (!isUser) {
+        const msgBodyEl = div.querySelector('.ai-msg-body');
+        if (msgBodyEl) {
+            const quizOptions = aiDetectQuiz(msg.content);
+            if (quizOptions) {
+                msgBodyEl.appendChild(_aiMakeQuizContainer(quizOptions));
+            } else if (msg.isTF) {
+                msgBodyEl.appendChild(_aiMakeTrueFalseContainer());
+            }
+        }
+    }
+
     // scroll ذكي: فقط لو المستخدم في الأسفل أصلاً
     if (scroll) {
         const atBottom = wrap.scrollHeight - wrap.scrollTop - wrap.clientHeight < 80;
@@ -313,9 +335,11 @@ async function aiSendMessage() {
     if (aiIsLoading) return;
     if (aiIsRecording) aiStopVoice();
 
-    const input = document.getElementById('ai-msg-input');
-    const text  = input?.value?.trim();
-    if (!text) return;
+    const input    = document.getElementById('ai-msg-input');
+    const text     = input?.value?.trim();
+    const hasImage = !!_aiPendingImage;
+
+    if (!text && !hasImage) return;
 
     if (!aiActiveChat) {
         if (aiAllChats.length >= AI_CONFIG.maxChats) {
@@ -328,12 +352,31 @@ async function aiSendMessage() {
         aiRenderSidebar();
     }
 
+    const msgText = text || (hasImage ? '📸 حللي الصورة دي' : '');
     input.value = '';
     aiAutoResize(input);
 
-    const userMsg = aiAddMessageToChat(aiActiveChat.id, 'user', text);
-    aiAppendMsgEl(userMsg);
+    // بناء محتوى الرسالة (نضيف prefix للصورة)
+    const userMsgContent = hasImage && !text ? '📸 حللي الصورة دي' : (hasImage ? `📸 ${text}` : text);
+
+    // ─── الإصلاح الجذري: نبني imageDataToSend أولاً قبل aiAddMessageToChat ───
+    // السبب: aiAddMessageToChat كان بيتستدعى بدون imageData فـ msg.imageBase64 ما بيتحفظش أبداً
+    const imageDataToSend = hasImage
+        ? { base64: _aiPendingImage.base64, type: _aiPendingImage.type }
+        : null;
+
+    // الآن نمرر imageDataToSend عشان يتحفظ imageBase64 و imageType في الرسالة
+    const userMsg = aiAddMessageToChat(aiActiveChat.id, 'user', userMsgContent, imageDataToSend);
+
+    // عرض الرسالة + الصورة في الـ DOM
+    const userMsgEl = aiAppendMsgEl(userMsg, true);
+    if (hasImage && userMsgEl) {
+        aiInjectImageIntoBubble(userMsgEl, _aiPendingImage.objectUrl);
+    }
     aiRenderSidebar();
+
+    // نمسح الـ pending image بعد ما حفظنا بياناتها
+    aiClearPendingImage();
 
     aiIsLoading = true;
     const sendBtn = document.getElementById('ai-send-btn');
@@ -341,7 +384,7 @@ async function aiSendMessage() {
     aiShowTyping();
 
     try {
-        const rawReply = await aiCallAPI(aiActiveChat.messages);
+        const rawReply = await aiCallAPI(aiActiveChat.messages, imageDataToSend);
         aiHideTyping();
 
         // ── استخراج markers قبل الحفظ ──
@@ -366,7 +409,16 @@ async function aiSendMessage() {
             }
         }
 
-        const aiMsg = aiAddMessageToChat(aiActiveChat.id, 'assistant', cleanReply);
+        const aiMsg = aiAddMessageToChat(aiActiveChat.id, 'assistant', cleanReply, null, { isTF: hasTF });
+
+        // ── حفظ تحليل الصورة على رسالة المستخدم (للسياق في الرسائل اللاحقة) ──
+        // لو الرسالة دي كانت فيها صورة: نحفظ رد الـ AI كـ imageAnalysis عشان يتذكره في الرسائل الجاية
+        if (imageDataToSend && userMsg) {
+            userMsg.imageAnalysis = cleanReply.substring(0, 600);
+            const _imgEmail = auth.currentUser?.email?.toLowerCase();
+            if (_imgEmail) aiSaveChats(_imgEmail, aiAllChats);
+        }
+
         await aiAppendMsgAnimated(aiMsg, hasTF);
         aiRenderSidebar();
 
@@ -377,7 +429,24 @@ async function aiSendMessage() {
         const code  = err.message || '';
         if (code === 'NETWORK')           errText = '🌐 مش قادر أوصل للمساعد — تأكد من الإنترنت';
         else if (code === 'HTTP_401' || code === 'HTTP_403') errText = '🔑 مفتاح الـ AI منتهي — تواصل مع الإدارة';
-        else if (code === 'HTTP_429')     errText = '⏱️ كثير طلبات — انتظر دقيقة وحاول تاني';
+        else if (code === 'HTTP_429') {
+            // تمييز بين rate limit (طلبات كثيرة) و daily token limit
+            let isDaily = false;
+            try {
+                const bodyObj  = JSON.parse(err.body || '{}');
+                const errMsg429 = (bodyObj?.error?.message || '').toLowerCase();
+                isDaily = errMsg429.includes('day') || errMsg429.includes('daily') ||
+                          errMsg429.includes('per day') || errMsg429.includes('exceeded') ||
+                          errMsg429.includes('tokens per day');
+            } catch {}
+            if (isDaily) {
+                errText = '🚫 تم الوصول للحد اليومي من استخدام الذكاء الاصطناعي، حاول لاحقاً أو انتظر إعادة التعيين';
+                aiStartRateLimitCooldown(120); // cooldown دقيقتان للـ daily limit
+            } else {
+                errText = '⏱️ كثير طلبات في وقت قصير — انتظر دقيقة وحاول تاني';
+                aiStartRateLimitCooldown(60);  // cooldown دقيقة للـ rate limit
+            }
+        }
         else if (code === 'HTTP_404')     errText = '🤖 المودل مش موجود — تواصل مع الإدارة';
         else if (code.startsWith('HTTP_5')) errText = '🔧 سيرفر الـ AI واقف — جرب بعد شوية';
         else if (code === 'EMPTY_RESPONSE') errText = '🤔 المساعد ما ردش — جرب تاني';
@@ -385,7 +454,10 @@ async function aiSendMessage() {
         aiAppendMsgEl(errMsg);
     } finally {
         aiIsLoading = false;
-        if (sendBtn) sendBtn.disabled = false;
+        // لا نعيد تفعيل الزر لو في cooldown فعّال (بعد 429)
+        if (_aiRateLimitUntil <= Date.now()) {
+            if (sendBtn) sendBtn.disabled = false;
+        }
         input?.focus();
     }
 }
@@ -921,7 +993,8 @@ async function aiHandleQuizAnswer(clickedBtn, option, container) {
     if (container.dataset.answered) return;
     container.dataset.answered = '1';
 
-    container.querySelectorAll('.ai-quiz-btn').forEach(b => {
+    const allBtns = container.querySelectorAll('.ai-quiz-btn');
+    allBtns.forEach(b => {
         b.disabled = true;
         b.classList.add('ai-quiz-disabled');
     });
@@ -948,10 +1021,39 @@ async function aiHandleQuizAnswer(clickedBtn, option, container) {
         const cleanRaw  = rawReply.replace(/\[TRUE_FALSE\]/g, '').trim();
         const isCorrect = cleanRaw.includes('✅');
         const isWrong   = cleanRaw.includes('❌');
+
         clickedBtn.querySelector('.ai-quiz-thinking')?.remove();
-        if (isCorrect) { clickedBtn.classList.add('ai-quiz-correct'); clickedBtn.innerHTML += ' ✅'; }
-        else if (isWrong) { clickedBtn.classList.add('ai-quiz-wrong'); clickedBtn.innerHTML += ' ❌'; }
-        const aiMsg = aiAddMessageToChat(aiActiveChat.id, 'assistant', cleanRaw);
+
+        if (isCorrect) {
+            // إجابة صح: الزر اللي اختاره بالأخضر
+            clickedBtn.classList.remove('ai-quiz-disabled', 'ai-quiz-selected');
+            clickedBtn.classList.add('ai-quiz-correct');
+            clickedBtn.innerHTML += ' ✅';
+        } else if (isWrong) {
+            // إجابة غلط: الزر اللي اختاره بالأحمر
+            clickedBtn.classList.remove('ai-quiz-disabled', 'ai-quiz-selected');
+            clickedBtn.classList.add('ai-quiz-wrong');
+            clickedBtn.innerHTML += ' ❌';
+
+            // محاولة استخراج الإجابة الصحيحة من رد الـ AI وإضاءتها بالأخضر
+            const correctLabelMatch =
+                cleanRaw.match(/الإجابة\s+الصحيحة\s+هي?\s*[:\-]?\s*([أابجده])\s*\)/) ||
+                cleanRaw.match(/الصواب\s+هو\s*[:\-]?\s*([أابجده])\s*\)/) ||
+                cleanRaw.match(/✅\s*([أابجده])\s*\)/) ||
+                cleanRaw.match(/^([أابجده])\s*\)\s+.+✅/m);
+
+            if (correctLabelMatch) {
+                const correctLabel = correctLabelMatch[1];
+                allBtns.forEach(b => {
+                    if (b.dataset.label === correctLabel && b !== clickedBtn) {
+                        b.classList.remove('ai-quiz-disabled');
+                        b.classList.add('ai-quiz-correct');
+                    }
+                });
+            }
+        }
+
+        const aiMsg = aiAddMessageToChat(aiActiveChat.id, 'assistant', cleanRaw, null, { isTF: hasTF });
         await aiAppendMsgAnimated(aiMsg, hasTF);
         aiRenderSidebar();
     } catch (err) {
@@ -1004,9 +1106,16 @@ function _aiMakeTrueFalseContainer() {
             const isCorrect = cleanRaw.includes('✅');
             const isWrong   = cleanRaw.includes('❌');
             btn.classList.remove('ai-tf-selected');
-            if (isCorrect)    btn.classList.add('ai-tf-correct');
-            else if (isWrong) btn.classList.add('ai-tf-wrong');
-            const aiMsg = aiAddMessageToChat(aiActiveChat.id, 'assistant', cleanRaw);
+            if (isCorrect) {
+                btn.classList.add('ai-tf-correct');
+            } else if (isWrong) {
+                btn.classList.add('ai-tf-wrong');
+                // الإجابة الصح تضيء بالأخضر
+                const otherBtn = (chosen === 'true') ? falseBtn : trueBtn;
+                otherBtn.classList.remove('ai-tf-dim');
+                otherBtn.classList.add('ai-tf-correct');
+            }
+            const aiMsg = aiAddMessageToChat(aiActiveChat.id, 'assistant', cleanRaw, null, { isTF: hasTF });
             await aiAppendMsgAnimated(aiMsg, hasTF);
             aiRenderSidebar();
         } catch {
@@ -1143,6 +1252,8 @@ function aiUpdateMemoryCount() {
 let aiSpeechRecognition = null;
 let aiIsRecording       = false;
 let aiPreRecordingText  = ''; // ✅ يحفظ النص الموجود قبل التسجيل
+let _aiPendingImage     = null; // { base64, type, objectUrl }
+let _aiRateLimitUntil   = 0;   // timestamp — cooldown بعد 429
 
 function aiToggleVoice() {
     // تحقق من دعم API
@@ -1229,6 +1340,261 @@ function aiStartVoice() {
     }
 }
 
+// ─── زر الإضافة (+) وإرفاق الصور ───────────────────────
+function aiToggleAttachMenu() {
+    const isMobile = window.innerWidth <= 640 ||
+        /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+    if (isMobile) {
+        // موبايل → Bottom Sheet
+        aiShowBottomSheet();
+    } else {
+        // كمبيوتر → قائمة منسدلة عادية
+        const menu = document.getElementById('ai-attach-menu');
+        if (!menu) return;
+        const isOpen = menu.classList.toggle('show');
+        if (isOpen) {
+            setTimeout(() => {
+                document.addEventListener('click', _aiCloseAttachOnClickOut, { once: true });
+            }, 10);
+        }
+    }
+}
+
+// ── Bottom Sheet للموبايل ─────────────────────────────────
+function aiShowBottomSheet() {
+    // إزالة قديم
+    document.getElementById('ai-attach-bottom-sheet-el')?.remove();
+
+    const sheet = document.createElement('div');
+    sheet.id        = 'ai-attach-bottom-sheet-el';
+    sheet.className = 'ai-attach-bottom-sheet';
+    sheet.innerHTML = `
+        <div class="ai-abs-backdrop"></div>
+        <div class="ai-abs-content">
+            <div class="ai-abs-handle"></div>
+            <div class="ai-abs-title">اختر نوع المحتوى</div>
+            <div class="ai-abs-options">
+                <button class="ai-abs-opt-btn" onclick="aiUploadImage(); aiCloseBottomSheet();">
+                    <div class="ai-abs-icon"><i class="fas fa-image"></i></div>
+                    رفع صورة
+                </button>
+                <button class="ai-abs-opt-btn" onclick="aiOpenCamera(); aiCloseBottomSheet();">
+                    <div class="ai-abs-icon"><i class="fas fa-camera"></i></div>
+                    كاميرا
+                </button>
+            </div>
+        </div>`;
+
+    const modal = document.getElementById('ai-modal');
+    if (!modal) return;
+    modal.appendChild(sheet);
+
+    sheet.querySelector('.ai-abs-backdrop')?.addEventListener('click', aiCloseBottomSheet);
+
+    // animation
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => sheet.classList.add('show'));
+    });
+}
+
+function aiCloseBottomSheet() {
+    const sheet = document.getElementById('ai-attach-bottom-sheet-el');
+    if (!sheet) return;
+    sheet.classList.remove('show');
+    setTimeout(() => sheet.remove(), 350);
+}
+
+function _aiCloseAttachOnClickOut(e) {
+    if (!e.target.closest('#ai-attach-menu') && !e.target.closest('#ai-attach-btn')) {
+        document.getElementById('ai-attach-menu')?.classList.remove('show');
+    }
+}
+
+function aiCloseAttachMenu() {
+    document.getElementById('ai-attach-menu')?.classList.remove('show');
+}
+
+function aiUploadImage() {
+    aiCloseAttachMenu();
+    const fileInput = document.createElement('input');
+    fileInput.type   = 'file';
+    fileInput.accept = 'image/*';
+    fileInput.onchange = (e) => { if (e.target.files[0]) aiHandleImageFile(e.target.files[0]); };
+    fileInput.click();
+}
+
+function aiOpenCamera() {
+    aiCloseAttachMenu();
+    aiCloseBottomSheet();
+
+    const isMobile = window.innerWidth <= 640 ||
+        /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+    if (isMobile) {
+        // موبايل → file input مع capture (يفتح كاميرا الجهاز مباشرة)
+        const fileInput = document.createElement('input');
+        fileInput.type    = 'file';
+        fileInput.accept  = 'image/*';
+        fileInput.capture = 'environment';
+        fileInput.onchange = (e) => { if (e.target.files[0]) aiHandleImageFile(e.target.files[0]); };
+        fileInput.click();
+    } else {
+        // كمبيوتر → WebRTC getUserMedia
+        aiOpenCameraWebRTC();
+    }
+}
+
+// ── WebRTC Camera للكمبيوتر ───────────────────────────────
+async function aiOpenCameraWebRTC() {
+    const modal = document.getElementById('ai-modal');
+    if (!modal) return;
+
+    // إنشاء الـ overlay
+    const overlay = document.createElement('div');
+    overlay.id        = 'ai-camera-overlay';
+    overlay.className = 'ai-camera-overlay';
+    overlay.innerHTML = `
+        <div class="ai-camera-modal">
+            <div class="ai-camera-header">
+                <span><i class="fas fa-camera" style="color:var(--ai-gold);margin-left:8px;"></i> التقاط صورة</span>
+                <button class="ai-camera-close-btn" id="ai-camera-close-btn">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="ai-camera-video-wrap">
+                <video id="ai-camera-video" autoplay playsinline muted></video>
+            </div>
+            <button class="ai-camera-capture-btn" id="ai-camera-capture-btn" title="التقاط">
+                <i class="fas fa-camera"></i>
+            </button>
+        </div>`;
+
+    modal.appendChild(overlay);
+    requestAnimationFrame(() => requestAnimationFrame(() => overlay.classList.add('show')));
+
+    let stream = null;
+    const video      = overlay.querySelector('#ai-camera-video');
+    const closeBtn   = overlay.querySelector('#ai-camera-close-btn');
+    const captureBtn = overlay.querySelector('#ai-camera-capture-btn');
+
+    const stopCamera = () => {
+        if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+        overlay.classList.remove('show');
+        setTimeout(() => overlay.remove(), 280);
+    };
+
+    closeBtn.addEventListener('click', stopCamera);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) stopCamera(); });
+
+    try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+        video.srcObject = stream;
+        await video.play().catch(() => {});
+    } catch (err) {
+        console.error('[AI WebRTC Camera]', err.name, err.message);
+        stopCamera();
+        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+            aiShowToast('مسموحتش بالكاميرا — افتح الإعدادات وامنح الإذن 📷', 'error');
+        } else if (err.name === 'NotFoundError') {
+            aiShowToast('مفيش كاميرا متاحة على الجهاز 📷', 'error');
+        } else {
+            aiShowToast('تعذّر الوصول للكاميرا: ' + err.name, 'error');
+        }
+        return;
+    }
+
+    captureBtn.addEventListener('click', () => {
+        const canvas = document.createElement('canvas');
+        canvas.width  = video.videoWidth  || 1280;
+        canvas.height = video.videoHeight || 720;
+        canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob((blob) => {
+            if (!blob) { aiShowToast('فشل التقاط الصورة ⚠️', 'error'); return; }
+            const file = new File([blob], `camera-${Date.now()}.jpg`, { type: 'image/jpeg' });
+            stopCamera();
+            aiHandleImageFile(file);
+        }, 'image/jpeg', 0.88);
+    });
+}
+
+function aiHandleImageFile(file) {
+    if (!file || !file.type.startsWith('image/')) {
+        aiShowToast('الملف ده مش صورة! ⚠️', 'error');
+        return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+        aiShowToast('الصورة كبيرة أوي — الحد الأقصى 5MB ⚠️', 'warn');
+        return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const dataUrl = e.target.result;
+        const base64  = dataUrl.split(',')[1];
+        _aiPendingImage = { base64, type: file.type, objectUrl: dataUrl };
+        aiShowImagePreviewBar(dataUrl);
+        // فوكس على الـ input عشان المستخدم يقدر يكتب سؤاله
+        document.getElementById('ai-msg-input')?.focus();
+    };
+    reader.readAsDataURL(file);
+}
+
+function aiShowImagePreviewBar(dataUrl) {
+    document.getElementById('ai-image-preview-bar')?.remove();
+    const bar = document.createElement('div');
+    bar.id        = 'ai-image-preview-bar';
+    bar.className = 'ai-image-preview-bar';
+    bar.innerHTML = `
+        <div class="ai-img-prev-thumb">
+            <img src="${dataUrl}" alt="صورة" onclick="aiOpenImageFullscreen('${dataUrl}')">
+            <div class="ai-img-prev-overlay"><i class="fas fa-expand-alt"></i></div>
+        </div>
+        <span class="ai-img-prev-label"><i class="fas fa-image"></i> صورة جاهزة للإرسال</span>
+        <button class="ai-img-prev-remove" onclick="aiClearPendingImage()" title="إزالة">
+            <i class="fas fa-times"></i>
+        </button>`;
+    const inputBar = document.getElementById('ai-input-bar');
+    if (inputBar) inputBar.insertBefore(bar, inputBar.firstChild);
+}
+
+function aiClearPendingImage() {
+    _aiPendingImage = null;
+    document.getElementById('ai-image-preview-bar')?.remove();
+}
+
+// ─── حقن الصورة داخل فقاعة الرسالة ──────────────────────
+function aiInjectImageIntoBubble(msgEl, imageUrl) {
+    const bubble = msgEl?.querySelector('.ai-msg-bubble');
+    if (!bubble) return;
+    const imgWrap = document.createElement('div');
+    imgWrap.className = 'ai-msg-img-wrap';
+    const img = document.createElement('img');
+    img.className = 'ai-msg-image';
+    img.src       = imageUrl;
+    img.alt       = 'صورة مرفقة';
+    img.loading   = 'lazy';
+    img.onclick   = () => aiOpenImageFullscreen(imageUrl);
+    imgWrap.appendChild(img);
+    bubble.insertBefore(imgWrap, bubble.firstChild);
+}
+
+// ─── عرض الصورة في وضع ملء الشاشة ───────────────────────
+function aiOpenImageFullscreen(url) {
+    document.getElementById('ai-img-fullscreen')?.remove();
+    const overlay = document.createElement('div');
+    overlay.id        = 'ai-img-fullscreen';
+    overlay.className = 'ai-img-fullscreen';
+    overlay.innerHTML = `
+        <button class="ai-img-fs-close" onclick="document.getElementById('ai-img-fullscreen').remove()">
+            <i class="fas fa-times"></i>
+        </button>
+        <img src="${url}" alt="صورة">`;
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) overlay.remove();
+    });
+    document.getElementById('ai-modal').appendChild(overlay);
+}
+
 function aiStopVoice() {
     aiIsRecording      = false;
     aiPreRecordingText = '';
@@ -1236,6 +1602,27 @@ function aiStopVoice() {
     if (micBtn) micBtn.classList.remove('ai-mic-recording');
     try { aiSpeechRecognition?.stop(); } catch(e) {}
     aiSpeechRecognition = null;
+}
+
+// ─── Cooldown بعد 429 — يمنع إعادة المحاولة الفورية ────────
+function aiStartRateLimitCooldown(seconds) {
+    _aiRateLimitUntil = Date.now() + seconds * 1000;
+    const sendBtn = document.getElementById('ai-send-btn');
+    if (!sendBtn) return;
+    sendBtn.disabled  = true;
+    const origHTML    = sendBtn.innerHTML;
+    const tick = () => {
+        const remaining = Math.ceil((_aiRateLimitUntil - Date.now()) / 1000);
+        if (remaining <= 0) {
+            _aiRateLimitUntil = 0;
+            sendBtn.disabled  = false;
+            sendBtn.innerHTML = origHTML;
+            return;
+        }
+        sendBtn.innerHTML = `<i class="fas fa-clock"></i><span style="font-size:11px;margin-right:3px">${remaining}s</span>`;
+        setTimeout(tick, 1000);
+    };
+    tick();
 }
 
 // ─── نسخ رسالة ───────────────────────────────────────────
@@ -1273,14 +1660,31 @@ function aiEditMessage(btn) {
     const msgIdx  = aiActiveChat.messages.findIndex(m => m.ts === msgId);
     if (msgIdx < 0 || !bubble) return;
 
-    const currentText = aiActiveChat.messages[msgIdx].content || '';
+    const currentMsg  = aiActiveChat.messages[msgIdx];
+    const currentText = currentMsg.content || '';
+    // نزيل prefix الصورة من النص المعروض في الـ input
+    const displayText = currentText
+        .replace(/^📸\s+/,'')
+        .replace(/^📸$/,'')
+        .trim();
 
-    // حول الـ bubble لـ input
+    bubble.innerHTML = '';
+
+    // لو في صورة محفوظة مع الرسالة: نعرض preview ثابت
+    if (currentMsg.imageBase64) {
+        const imgDataUrl = `data:${currentMsg.imageType || 'image/jpeg'};base64,${currentMsg.imageBase64}`;
+        const imgPreview = document.createElement('div');
+        imgPreview.className = 'ai-edit-img-preview';
+        imgPreview.innerHTML = `
+            <img src="${imgDataUrl}" alt="صورة مرفقة" onclick="aiOpenImageFullscreen('${imgDataUrl}')" title="اضغط للتكبير">
+            <span class="ai-edit-img-label"><i class="fas fa-image"></i> الصورة مرفقة وسيتم إرسالها مع التعديل</span>`;
+        bubble.appendChild(imgPreview);
+    }
+
     const input = document.createElement('textarea');
     input.className   = 'ai-edit-input';
-    input.value       = currentText;
+    input.value       = displayText;
     input.rows        = 3;
-    bubble.innerHTML  = '';
     bubble.appendChild(input);
     input.focus();
     input.select();
@@ -1288,19 +1692,25 @@ function aiEditMessage(btn) {
     const confirmBtn = document.createElement('button');
     confirmBtn.className = 'ai-edit-confirm-btn';
     confirmBtn.innerHTML = '<i class="fas fa-paper-plane"></i> إعادة إرسال';
-    confirmBtn.onclick = () => aiConfirmEdit(msgDiv, msgIdx, input.value);
+    confirmBtn.onclick = () => aiConfirmEdit(
+        msgDiv, msgIdx, input.value,
+        currentMsg.imageBase64 || null,
+        currentMsg.imageType   || null
+    );
     bubble.appendChild(confirmBtn);
 
     const cancelBtn = document.createElement('button');
     cancelBtn.className = 'ai-edit-cancel-btn';
     cancelBtn.innerHTML = '<i class="fas fa-times"></i>';
-    cancelBtn.onclick = () => aiRenderMessages(); // إلغاء — إعادة رسم
+    cancelBtn.onclick = () => aiRenderMessages();
     bubble.appendChild(cancelBtn);
 }
 
-async function aiConfirmEdit(msgDiv, msgIdx, newText) {
+async function aiConfirmEdit(msgDiv, msgIdx, newText, savedBase64 = null, savedType = null) {
     newText = (newText || '').trim();
-    if (!newText || !aiActiveChat) { aiRenderMessages(); return; }
+    // يجب أن يكون فيه نص أو صورة
+    if (!newText && !savedBase64) { aiRenderMessages(); return; }
+    if (!aiActiveChat) { aiRenderMessages(); return; }
 
     const email = auth.currentUser?.email?.toLowerCase();
     if (!email) return;
@@ -1309,8 +1719,17 @@ async function aiConfirmEdit(msgDiv, msgIdx, newText) {
     aiActiveChat.messages = aiActiveChat.messages.slice(0, msgIdx);
     aiSaveChats(email, aiAllChats);
 
-    // إعادة رسم + إرسال الرسالة الجديدة
+    // إعادة رسم
     aiRenderMessages();
+
+    // لو في صورة محفوظة: نعيد تعيينها كـ pending image
+    if (savedBase64) {
+        const mimeType = savedType || 'image/jpeg';
+        const dataUrl  = `data:${mimeType};base64,${savedBase64}`;
+        _aiPendingImage = { base64: savedBase64, type: mimeType, objectUrl: dataUrl };
+        aiShowImagePreviewBar(dataUrl);
+    }
+
     const input = document.getElementById('ai-msg-input');
     if (input) {
         input.value = newText;
@@ -1324,66 +1743,7 @@ function aiDetectTrueFalse(text) {
     return /\[TRUE_FALSE\]/.test(text);
 }
 
-// ─── رسم أزرار صح/غلط ────────────────────────────────────
-function aiRenderTrueFalseOptions(parentEl) {
-    const container = document.createElement('div');
-    container.className = 'ai-tf-container';
-
-    const trueBtn  = document.createElement('button');
-    trueBtn.className = 'ai-tf-btn ai-tf-true';
-    trueBtn.innerHTML = '<i class="fas fa-check"></i> صح ✅';
-
-    const falseBtn = document.createElement('button');
-    falseBtn.className = 'ai-tf-btn ai-tf-false';
-    falseBtn.innerHTML = '<i class="fas fa-times"></i> غلط ❌';
-
-    const handler = async (chosen, btn) => {
-        if (container.dataset.answered) return;
-        container.dataset.answered = '1';
-        trueBtn.disabled = falseBtn.disabled = true;
-        trueBtn.classList.add('ai-tf-dim');
-        falseBtn.classList.add('ai-tf-dim');
-        btn.classList.remove('ai-tf-dim');
-        btn.classList.add('ai-tf-selected');
-
-        if (!aiActiveChat) return;
-        const choiceText = chosen === 'true' ? 'إجابتي: صح' : 'إجابتي: غلط';
-        const userMsg = aiAddMessageToChat(aiActiveChat.id, 'user', choiceText);
-        aiAppendMsgEl(userMsg);
-        aiRenderSidebar();
-
-        aiIsLoading = true;
-        const sendBtn = document.getElementById('ai-send-btn');
-        if (sendBtn) sendBtn.disabled = true;
-        aiShowTyping();
-        try {
-            const rawReply = await aiCallAPI(aiActiveChat.messages);
-            aiHideTyping();
-            const isCorrect = rawReply.includes('✅');
-            const isWrong   = rawReply.includes('❌');
-            btn.classList.remove('ai-tf-selected');
-            if (isCorrect)     btn.classList.add('ai-tf-correct');
-            else if (isWrong)  btn.classList.add('ai-tf-wrong');
-            const aiMsg = aiAddMessageToChat(aiActiveChat.id, 'assistant', rawReply);
-            await aiAppendMsgAnimated(aiMsg);
-            aiRenderSidebar();
-        } catch {
-            aiHideTyping();
-            const errMsg = aiAddMessageToChat(aiActiveChat.id, 'assistant', '⚠️ حصلت مشكلة — جرب تاني');
-            aiAppendMsgEl(errMsg);
-        } finally {
-            aiIsLoading = false;
-            if (sendBtn) sendBtn.disabled = false;
-        }
-    };
-
-    trueBtn.addEventListener('click',  () => handler('true',  trueBtn));
-    falseBtn.addEventListener('click', () => handler('false', falseBtn));
-
-    container.appendChild(trueBtn);
-    container.appendChild(falseBtn);
-    parentEl.appendChild(container);
-}
+// NOTE: aiRenderTrueFalseOptions is defined earlier (backward-compat wrapper for _aiMakeTrueFalseContainer)
 
 // ─── ميزة "اسأل عن الكلمة" (word selection popup) ─────────
 let _aiWordPopupTimer = null;
@@ -1454,7 +1814,47 @@ function aiInitWordSelection() {
     document.addEventListener('mousedown', hidePopup);
 }
 
+// ─── إصلاح الكيبورد على الموبايل ────────────────────────
+function aiInitMobileKeyboard() {
+    if (!window.visualViewport) return;
+    const modal = document.getElementById('ai-modal');
+    if (!modal) return;
+
+    let lastHeight = window.visualViewport.height;
+
+    window.visualViewport.addEventListener('resize', () => {
+        const vv     = window.visualViewport;
+        const newH   = vv.height;
+        const newTop = vv.offsetTop || 0;
+
+        // نطبّق الأبعاد على الـ modal فقط بدون أي تأثير على باقي الصفحة
+        modal.style.height = newH + 'px';
+        modal.style.top    = newTop + 'px';
+        modal.style.bottom = 'auto';
+
+        // لو الكيبورد اتفتح (ارتفاع اصغر): scroll للأسفل في الرسائل
+        if (newH < lastHeight) {
+            setTimeout(() => {
+                const wrap = document.getElementById('ai-messages-wrap');
+                if (wrap) wrap.scrollTop = wrap.scrollHeight;
+            }, 80);
+        }
+        lastHeight = newH;
+    });
+
+    // لما الـ modal يتفتح نعيد الحجم الطبيعي
+    const observer = new MutationObserver(() => {
+        if (!modal.classList.contains('open')) {
+            modal.style.height = '';
+            modal.style.top    = '';
+            modal.style.bottom = '';
+        }
+    });
+    observer.observe(modal, { attributes: true, attributeFilter: ['class'] });
+}
+
 // تشغيل عند فتح الـ modal
 document.addEventListener('DOMContentLoaded', () => {
     setTimeout(aiInitWordSelection, 500);
+    aiInitMobileKeyboard();
 });
