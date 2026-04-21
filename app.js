@@ -275,8 +275,9 @@ async function loadSections() {
         currentUserAllowedGrades = allSections.map(s => s.id);
     }
 
-    // رسم العناصر الديناميكية
-    renderSectionPicker(null);
+    // رسم العناصر الديناميكية — المشترك يرى أقسامه فقط
+    const _pickerGrades = currentUserRole === 'master' ? null : (currentUserAllowedGrades.length > 0 ? currentUserAllowedGrades : []);
+    renderSectionPicker(_pickerGrades);
     renderAdminGradeTabs();
     renderVGradeSelect();
     renderUserPermissionCheckboxes();
@@ -881,6 +882,10 @@ document.addEventListener('click', function(e) {
 //  اختيار الصف
 // ============================================
 function openGradePicker(allowedGrades = null) {
+    // ══ حماية: المشترك يرى أقسامه فقط — لا تُظهر له أقساماً غير مخصصة له ══
+    if (currentUserRole !== 'master' && allowedGrades === null) {
+        allowedGrades = currentUserAllowedGrades.length > 0 ? currentUserAllowedGrades : [];
+    }
     renderSectionPicker(allowedGrades);
     document.getElementById('grade-picker').classList.remove('hidden');
     const menu = document.getElementById('drop-menu');

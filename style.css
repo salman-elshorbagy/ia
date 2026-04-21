@@ -39,7 +39,7 @@ body {
 }
 
 /* =========================================
-   القائمة المنسدلة — تصميم محسّن
+   القائمة المنسدلة — تصميم تقني زجاجي
    ========================================= */
 
 /* الكارت الرئيسي */
@@ -47,20 +47,36 @@ body {
     position: absolute;
     top: calc(100% + 10px);
     right: 0;
-    width: 196px;
-    background: linear-gradient(160deg, #1b2536 0%, #111827 100%);
-    border: 1px solid rgba(197, 160, 89, 0.22);
+    width: 210px;
+    background: linear-gradient(160deg, rgba(16,22,36,0.98) 0%, rgba(10,14,24,0.99) 100%);
+    border: 1px solid rgba(197, 160, 89, 0.28);
     border-radius: 20px;
     display: none;
     flex-direction: column;
     overflow: hidden;
     box-shadow:
-        0 24px 60px rgba(0, 0, 0, 0.75),
-        0 4px 16px rgba(0, 0, 0, 0.5),
-        inset 0 1px 0 rgba(255, 255, 255, 0.06);
+        0 28px 70px rgba(0, 0, 0, 0.85),
+        0 4px 20px rgba(0, 0, 0, 0.6),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05),
+        0 0 0 1px rgba(197,160,89,0.06);
     z-index: 5000;
     padding: 6px;
     transform-origin: top right;
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+}
+
+/* خط الـ code decoration في الأسفل */
+#drop-menu::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(197,160,89,0.3), transparent);
+    border-radius: 0 0 20px 20px;
+    pointer-events: none;
 }
 
 /* مثلث السهم أعلى القائمة */
@@ -71,26 +87,14 @@ body {
     right: 18px;
     border-left: 7px solid transparent;
     border-right: 7px solid transparent;
-    border-bottom: 7px solid rgba(197, 160, 89, 0.22);
+    border-bottom: 7px solid rgba(197, 160, 89, 0.28);
     pointer-events: none;
     z-index: 1;
 }
 
-#drop-menu::after {
-    content: '';
-    position: absolute;
-    top: -5px;
-    right: 19px;
-    border-left: 6px solid transparent;
-    border-right: 6px solid transparent;
-    border-bottom: 6px solid #1b2536;
-    pointer-events: none;
-    z-index: 2;
-}
-
-/* أنيميشن الظهور — يُفعَّل عندما JS يضبط display:flex */
+/* أنيميشن الظهور */
 @keyframes dropMenuIn {
-    0%   { opacity: 0; transform: scale(0.91) translateY(-8px); }
+    0%   { opacity: 0; transform: scale(0.91) translateY(-10px); }
     100% { opacity: 1; transform: scale(1)    translateY(0); }
 }
 #drop-menu[style*="display: flex"],
@@ -98,29 +102,36 @@ body {
     animation: dropMenuIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-/* ====== رأس القائمة ====== */
+/* ====== رأس القائمة - Terminal style ====== */
 .dm-header {
     display: flex;
     align-items: center;
     gap: 7px;
-    padding: 10px 13px 8px;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
+    padding: 9px 13px 8px;
+    border-bottom: 1px solid rgba(197,160,89,0.1);
     margin-bottom: 4px;
+    background: rgba(197,160,89,0.04);
+    border-radius: 14px 14px 0 0;
 }
 .dm-header-dot {
     width: 6px;
     height: 6px;
     border-radius: 50%;
     background: #c5a059;
-    box-shadow: 0 0 6px rgba(197,160,89,0.6);
+    box-shadow: 0 0 8px rgba(197,160,89,0.8);
     flex-shrink: 0;
+    animation: dotPulse 2s ease-in-out infinite;
+}
+@keyframes dotPulse {
+    0%, 100% { box-shadow: 0 0 4px rgba(197,160,89,0.5); }
+    50% { box-shadow: 0 0 10px rgba(197,160,89,0.9); }
 }
 .dm-header-text {
-    color: rgba(255,255,255,0.3);
-    font-family: 'Cairo', sans-serif;
-    font-size: 9px;
+    color: rgba(197,160,89,0.6);
+    font-family: 'Space Mono', monospace;
+    font-size: 8px;
     font-weight: 700;
-    letter-spacing: 1.5px;
+    letter-spacing: 2px;
     text-transform: uppercase;
 }
 
@@ -133,122 +144,97 @@ body {
     font-size: 11px !important;
     font-weight: 900;
     font-family: 'Cairo', sans-serif;
-    color: rgba(255, 255, 255, 0.82);
+    color: rgba(255, 255, 255, 0.78);
     background: transparent;
     border: none;
     cursor: pointer;
     display: flex;
     align-items: center;
     gap: 9px;
-    transition: background 0.16s ease, transform 0.16s ease, color 0.16s ease;
+    transition: background 0.18s ease, transform 0.16s ease, color 0.16s ease;
     position: relative;
     margin: 1px 0;
 }
 
 .dm-btn:hover {
-    background: rgba(255, 255, 255, 0.06) !important;
+    background: rgba(197, 160, 89, 0.07) !important;
     color: white;
     transform: translateX(-2px);
 }
-
 .dm-btn:active {
     transform: scale(0.97) translateX(-1px);
 }
 
 /* ====== أيقونة الزرار ====== */
 .dm-icon-wrap {
-    width: 28px;
-    height: 28px;
+    width: 30px;
+    height: 30px;
     border-radius: 9px;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
     font-size: 12px;
-    transition: transform 0.16s ease;
+    transition: transform 0.18s ease;
+    border: 1px solid transparent;
 }
-
 .dm-btn:hover .dm-icon-wrap {
     transform: scale(1.12);
 }
-
 .dm-icon-gold {
-    background: rgba(197, 160, 89, 0.13);
+    background: rgba(197, 160, 89, 0.12);
     color: #c5a059;
+    border-color: rgba(197,160,89,0.15);
 }
-
 .dm-icon-red {
-    background: rgba(239, 68, 68, 0.12);
+    background: rgba(239, 68, 68, 0.1);
     color: #f87171;
+    border-color: rgba(239,68,68,0.12);
 }
-
 .dm-icon-red-faint {
-    background: rgba(239, 68, 68, 0.07);
-    color: rgba(248, 113, 113, 0.7);
+    background: rgba(239, 68, 68, 0.06);
+    color: rgba(248, 113, 113, 0.65);
 }
 
-/* ====== نص الزرار ====== */
-.dm-label {
-    flex: 1;
-    text-align: right;
-}
-
-/* ====== السهم الجانبي ====== */
+/* ====== نص + سهم ====== */
+.dm-label { flex: 1; text-align: right; }
 .dm-chevron {
     font-size: 9px;
-    color: rgba(255, 255, 255, 0.18);
+    color: rgba(255, 255, 255, 0.15);
     transition: color 0.16s, transform 0.16s;
     margin-right: auto;
     flex-shrink: 0;
 }
-
 .dm-btn:hover .dm-chevron {
-    color: rgba(197, 160, 89, 0.55);
-    transform: translateX(-2px);
+    color: rgba(197, 160, 89, 0.5);
+    transform: translateX(-3px);
 }
 
-/* ====== زرار لوحة المدرس ====== */
-.dm-btn-admin {
-    color: rgba(248, 113, 113, 0.8);
-}
+/* ====== زرارات خاصة ====== */
+.dm-btn-admin { color: rgba(248, 113, 113, 0.75); }
+.dm-btn-admin:hover { background: rgba(239,68,68,0.08) !important; color: #f87171; }
+.dm-btn-admin:hover .dm-chevron { color: rgba(248,113,113,0.45); }
 
-.dm-btn-admin:hover {
-    background: rgba(239, 68, 68, 0.09) !important;
-    color: #f87171;
-}
-
-.dm-btn-admin:hover .dm-chevron {
-    color: rgba(248, 113, 113, 0.5);
-}
-
-/* ====== زرار تسجيل الخروج ====== */
-.dm-btn-logout {
-    color: rgba(255, 255, 255, 0.38);
-}
-
-.dm-btn-logout:hover {
-    background: rgba(239, 68, 68, 0.07) !important;
-    color: rgba(248, 113, 113, 0.85);
-}
+.dm-btn-logout { color: rgba(255,255,255,0.35); }
+.dm-btn-logout:hover { background: rgba(239,68,68,0.06) !important; color: rgba(248,113,113,0.8); }
 
 /* ====== الفاصل ====== */
 .dm-sep {
     height: 1px;
-    background: rgba(255, 255, 255, 0.06);
-    margin: 4px 8px;
-    border-radius: 1px;
+    background: linear-gradient(90deg, transparent, rgba(197,160,89,0.12), transparent);
+    margin: 5px 8px;
 }
 
 /* =========================================
-   لوحة الإدارة
+   لوحة الإدارة — تصميم احترافي
    ========================================= */
 #admin-modal {
     display: none;
     position: fixed;
     inset: 0;
     background: rgba(4,6,12,0.97);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
     z-index: 10000;
     padding: 16px;
     overflow-y: auto;
@@ -257,8 +243,8 @@ body {
 }
 
 .admin-box {
-    background: linear-gradient(160deg, #111827, #0c1220);
-    border: 1px solid var(--border-gold);
+    background: linear-gradient(160deg, #0e1520 0%, #080d18 100%);
+    border: 1px solid rgba(197,160,89,0.22);
     width: 100%;
     max-width: 700px;
     border-radius: 24px;
@@ -266,7 +252,21 @@ body {
     margin: auto;
     max-height: none;
     animation: modalEntry 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-    box-shadow: 0 32px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(197,160,89,0.05);
+    box-shadow:
+        0 32px 90px rgba(0,0,0,0.8),
+        0 0 0 1px rgba(197,160,89,0.06),
+        inset 0 1px 0 rgba(255,255,255,0.04);
+    position: relative;
+}
+
+/* خط ذهبي في الأعلى */
+.admin-box::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 24px; right: 24px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(197,160,89,0.4), transparent);
+    border-radius: 1px;
 }
 
 .admin-box input,
@@ -277,9 +277,9 @@ body {
 }
 
 .delete-section {
-    background: rgba(239, 68, 68, 0.05);
-    border: 2px dashed rgba(239, 68, 68, 0.2);
-    border-radius: 20px;
+    background: rgba(239, 68, 68, 0.04);
+    border: 1px dashed rgba(239, 68, 68, 0.18);
+    border-radius: 18px;
     padding: 20px;
     margin-top: 20px;
 }
@@ -633,7 +633,7 @@ body {
 }
 
 /* =========================================
-   منتقي القسم — تصميم احترافي زجاجي
+   منتقي القسم — تصميم تقني احترافي
    ========================================= */
 
 /* خلفية الـ glow المتحركة */
@@ -642,11 +642,16 @@ body {
     top: -30%;
     left: 50%;
     transform: translateX(-50%);
-    width: 600px;
-    height: 600px;
-    background: radial-gradient(ellipse, rgba(197,160,89,0.07) 0%, transparent 70%);
+    width: 700px;
+    height: 700px;
+    background: radial-gradient(ellipse, rgba(197,160,89,0.09) 0%, transparent 65%);
     pointer-events: none;
     z-index: 0;
+    animation: glowPulse 4s ease-in-out infinite;
+}
+@keyframes glowPulse {
+    0%, 100% { opacity: 0.6; transform: translateX(-50%) scale(1); }
+    50%       { opacity: 1;   transform: translateX(-50%) scale(1.08); }
 }
 
 /* الحاوية الداخلية */
@@ -677,17 +682,17 @@ body {
     width: 40px;
     height: 40px;
     border-radius: 12px;
-    background: rgba(255,255,255,0.06);
+    background: rgba(255,255,255,0.05);
     border: 1px solid rgba(255,255,255,0.1);
-    color: rgba(255,255,255,0.5);
+    color: rgba(255,255,255,0.45);
     font-size: 15px;
     cursor: pointer;
     transition: all 0.2s ease;
 }
 .gp-close-btn:hover {
-    background: rgba(255,255,255,0.12);
-    color: white;
-    border-color: rgba(255,255,255,0.2);
+    background: rgba(239,68,68,0.12);
+    color: #f87171;
+    border-color: rgba(239,68,68,0.25);
 }
 
 /* الهيدر */
@@ -695,24 +700,25 @@ body {
     display: flex;
     align-items: center;
     gap: 14px;
-    margin-bottom: 28px;
+    margin-bottom: 30px;
     text-align: right;
     width: 100%;
     max-width: 480px;
 }
 
 .grade-picker-logo {
-    width: 46px;
-    height: 46px;
-    border-radius: 14px;
-    background: linear-gradient(135deg, rgba(197,160,89,0.18), rgba(197,160,89,0.05));
-    border: 1px solid rgba(197,160,89,0.25);
+    width: 50px;
+    height: 50px;
+    border-radius: 15px;
+    background: linear-gradient(135deg, rgba(197,160,89,0.2), rgba(197,160,89,0.06));
+    border: 1px solid rgba(197,160,89,0.3);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 19px;
+    font-size: 21px;
     color: #c5a059;
     flex-shrink: 0;
+    box-shadow: 0 0 20px rgba(197,160,89,0.12), inset 0 1px 0 rgba(255,255,255,0.06);
 }
 
 .grade-picker-title {
@@ -728,11 +734,14 @@ body {
     font-family: 'Cairo', sans-serif;
     font-size: 11px;
     font-weight: 700;
-    color: rgba(255,255,255,0.3);
+    color: rgba(197,160,89,0.5);
     margin: 0;
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.05em;
 }
 
-/* الشبكة — الآن قائمة عمودية */
+/* الشبكة — قائمة عمودية */
 .grade-picker-grid {
     display: flex;
     flex-direction: column;
@@ -742,20 +751,8 @@ body {
     animation: gpGridIn 0.35s cubic-bezier(0.16,1,0.3,1) both;
 }
 @keyframes gpGridIn {
-    from { opacity:0; transform:translateY(20px); }
+    from { opacity:0; transform:translateY(22px); }
     to   { opacity:1; transform:translateY(0); }
-}
-
-/* تسمية المجموعة */
-.gp-section-label {
-    font-family: 'Cairo', sans-serif;
-    font-size: 10px;
-    font-weight: 700;
-    color: rgba(255,255,255,0.22);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    padding: 0 4px 8px;
-    margin-top: 4px;
 }
 
 /* الكارت الأفقي */
@@ -764,56 +761,68 @@ body {
     align-items: center;
     gap: 14px;
     width: 100%;
-    padding: 13px 16px;
-    border-radius: 12px;
+    padding: 14px 16px;
+    border-radius: 14px;
     cursor: pointer;
     border: 1px solid rgba(255,255,255,0.07);
-    background: rgba(255,255,255,0.035);
-    transition: all 0.18s ease;
+    background: rgba(255,255,255,0.03);
+    transition: all 0.2s ease;
     text-align: right;
-    margin-bottom: 7px;
+    margin-bottom: 8px;
     position: relative;
     overflow: hidden;
 }
+/* glow effect on hover */
+.gp-row-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(197,160,89,0.04), transparent);
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+.gp-row-card:hover::before { opacity: 1; }
 .gp-row-card:hover {
-    border-color: rgba(197,160,89,0.3);
-    background: rgba(197,160,89,0.06);
-    transform: translateX(-3px);
+    border-color: rgba(197,160,89,0.32);
+    background: rgba(197,160,89,0.05);
+    transform: translateX(-4px);
+    box-shadow: 0 6px 24px rgba(0,0,0,0.3), 4px 0 0 rgba(197,160,89,0.2) inset;
 }
-.gp-row-card:active {
-    transform: scale(0.98);
-}
+.gp-row-card:active { transform: scale(0.98); }
 
 .gp-row-card-gold {
     border-color: rgba(197,160,89,0.15);
-    background: rgba(197,160,89,0.04);
+    background: rgba(197,160,89,0.035);
 }
 .gp-row-card-gold:hover {
-    border-color: rgba(197,160,89,0.4);
-    background: rgba(197,160,89,0.09);
+    border-color: rgba(197,160,89,0.45);
+    background: rgba(197,160,89,0.08);
+    box-shadow: 0 6px 24px rgba(0,0,0,0.3), 4px 0 0 rgba(197,160,89,0.35) inset;
 }
 
 /* أيقونة الكارت */
 .gp-row-icon {
-    width: 40px;
-    height: 40px;
-    border-radius: 10px;
+    width: 42px;
+    height: 42px;
+    border-radius: 11px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 17px;
+    font-size: 18px;
     flex-shrink: 0;
-    transition: transform 0.18s ease;
+    transition: transform 0.2s ease;
 }
-.gp-row-card:hover .gp-row-icon { transform: scale(1.08); }
+.gp-row-card:hover .gp-row-icon { transform: scale(1.1) rotate(-3deg); }
 
 .gp-row-icon-default {
     background: rgba(255,255,255,0.07);
     color: rgba(255,255,255,0.65);
+    border: 1px solid rgba(255,255,255,0.08);
 }
 .gp-row-icon-gold {
-    background: rgba(197,160,89,0.12);
+    background: rgba(197,160,89,0.14);
     color: #c5a059;
+    border: 1px solid rgba(197,160,89,0.2);
 }
 
 /* اسم القسم */
@@ -831,17 +840,17 @@ body {
 /* سهم الانتقال */
 .gp-row-arrow {
     font-size: 11px;
-    color: rgba(255,255,255,0.18);
+    color: rgba(255,255,255,0.16);
     flex-shrink: 0;
-    transition: all 0.18s ease;
+    transition: all 0.2s ease;
 }
-.gp-row-card:hover .gp-row-arrow { color: rgba(197,160,89,0.6); transform: translateX(-2px); }
-.gp-row-arrow-gold { color: rgba(197,160,89,0.3); }
+.gp-row-card:hover .gp-row-arrow { color: rgba(197,160,89,0.65); transform: translateX(-3px); }
+.gp-row-arrow-gold { color: rgba(197,160,89,0.28); }
 
 /* فاصل بين المجموعات */
 .gp-row-divider {
     height: 1px;
-    background: rgba(255,255,255,0.06);
+    background: linear-gradient(90deg, transparent, rgba(197,160,89,0.15), transparent);
     margin: 10px 0 14px;
     width: 100%;
 }
@@ -849,11 +858,12 @@ body {
 /* التذييل */
 .grade-picker-footer {
     margin-top: 24px;
-    font-family: 'Cairo', sans-serif;
-    font-size: 10px;
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
     font-weight: 700;
-    color: rgba(255,255,255,0.15);
+    color: rgba(255,255,255,0.12);
     text-align: center;
+    letter-spacing: 0.08em;
 }
 
 /* Mobile */
@@ -862,7 +872,7 @@ body {
     .grade-picker-header { margin-bottom: 22px; max-width: 100%; }
     .grade-picker-title { font-size: 17px; }
     .grade-picker-grid { max-width: 100%; }
-    .gp-row-card { padding: 12px 14px; border-radius: 10px; margin-bottom: 6px; }
+    .gp-row-card { padding: 12px 14px; border-radius: 11px; margin-bottom: 6px; }
     .gp-row-icon { width: 36px; height: 36px; font-size: 15px; border-radius: 9px; }
     .gp-row-name { font-size: 12px; }
 }
@@ -874,8 +884,8 @@ body {
 @media (min-width: 768px) {
     .grade-picker-grid { max-width: 500px; }
     .grade-picker-header { max-width: 500px; }
-    .gp-row-card { padding: 15px 20px; border-radius: 13px; }
-    .gp-row-icon { width: 44px; height: 44px; font-size: 19px; border-radius: 11px; }
+    .gp-row-card { padding: 15px 20px; border-radius: 14px; }
+    .gp-row-icon { width: 44px; height: 44px; font-size: 19px; border-radius: 12px; }
     .gp-row-name { font-size: 14px; }
 }
 
@@ -1233,4 +1243,95 @@ body {
         right: 0;
         left: auto;
     }
+}
+/* =========================================
+   Profile Modal — تحسينات بصرية متقدمة
+   ========================================= */
+
+/* بطاقات الإحصاء في البروفايل */
+#profile-modal .grid > div {
+    position: relative;
+    overflow: hidden;
+}
+#profile-modal .grid > div::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(197,160,89,0.25), transparent);
+}
+
+/* تحسين background gradient للـ profile modal box */
+#profile-modal > div:last-child {
+    background: linear-gradient(160deg, #0e1520 0%, #080d18 100%) !important;
+}
+
+/* =========================================
+   Admin Tabs — تحسين تبويبات لوحة التحكم
+   ========================================= */
+.tab-btn {
+    transition: all 0.25s ease;
+    color: rgba(255,255,255,0.4);
+    font-family: 'Cairo', sans-serif;
+    border: none;
+    cursor: pointer;
+    background: transparent;
+}
+.tab-btn.active {
+    background: linear-gradient(135deg, #c5a059, #d4b06a) !important;
+    color: #080c14 !important;
+    box-shadow: 0 4px 20px rgba(197,160,89,0.35);
+}
+.tab-btn:not(.active):hover {
+    background: rgba(197,160,89,0.08) !important;
+    color: rgba(255,255,255,0.7);
+}
+
+/* =========================================
+   Admin grade tabs المحسّنة
+   ========================================= */
+.admin-grade-tab {
+    padding: 5px 14px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: 'Cairo', sans-serif;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.04);
+    color: rgba(255,255,255,0.5);
+    transition: all 0.2s ease;
+}
+.admin-grade-tab:hover {
+    background: rgba(197,160,89,0.08);
+    color: rgba(197,160,89,0.8);
+    border-color: rgba(197,160,89,0.2);
+}
+.admin-grade-tab.active-ag {
+    background: linear-gradient(135deg, #c5a059, #d4b06a) !important;
+    color: #080c14 !important;
+    border-color: #c5a059 !important;
+    box-shadow: 0 2px 12px rgba(197,160,89,0.3);
+}
+
+/* =========================================
+   Section cards in profile (مساراتي)
+   ========================================= */
+#profile-grades-progress > div {
+    position: relative;
+    overflow: hidden;
+}
+#profile-grades-progress > div::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(197,160,89,0.15), transparent);
+}
+
+/* =========================================
+   Grade picker background override
+   ========================================= */
+#grade-picker {
+    background: linear-gradient(160deg, #050810 0%, #0a0f1c 50%, #050810 100%) !important;
 }
