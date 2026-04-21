@@ -23,6 +23,19 @@
         div.swal2-container.swal2-top { z-index: 999999 !important; }
         div.swal2-toast-shown .swal2-container { z-index: 999999 !important; }
 
+        /* ====== كارت اختيار القسم ====== */
+        .section-picker-card {
+            font-family: 'Cairo', sans-serif;
+            transition: all 0.25s ease;
+        }
+        .section-picker-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 32px rgba(197,160,89,0.18);
+        }
+        .section-picker-card:active {
+            transform: scale(0.97);
+        }
+
         /* ====== تابز المحتوى الرئيسي ====== */
         .content-tab-btn {
             color: rgba(255,255,255,0.5);
@@ -38,7 +51,7 @@
             box-shadow: 0 0 15px rgba(197,160,89,0.3);
         }
 
-        /* ====== تابز الصف في لوحة الأدمن ====== */
+        /* ====== تابز القسم في لوحة الأدمن ====== */
         .admin-grade-tab {
             padding: 5px 12px;
             border-radius: 20px;
@@ -170,7 +183,7 @@
                     <i class="fas fa-angle-left dm-chevron"></i>
                 </button>
 
-                <!-- تغيير الصف - يُخفى للطلاب ذوي الصف الواحد بـ JS -->
+                <!-- تغيير القسم - يُخفى للمشتركين ذوي القسم الواحد بـ JS -->
                 <button onclick="openGradePicker(); toggleMenu();" class="dm-btn change-grade-btn">
                     <span class="dm-icon-wrap dm-icon-gold">
                         <i class="fas fa-layer-group"></i>
@@ -214,34 +227,12 @@
     </div>
 </header>
 
-<!-- ====== منتقي الصف ====== -->
+<!-- ====== منتقي القسم ====== -->
 <div id="grade-picker" class="fixed inset-0 z-[8000] bg-[#080c14] hidden flex flex-col items-center justify-center p-6 text-center overflow-y-auto">
-    <h3 class="text-3xl font-black mb-12 animate__animated animate__fadeInDown">مرحباً بك.. اختر قسمك</h3>
-    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 w-full max-w-5xl animate__animated animate__zoomIn">
-        <button data-grade="1-mid" onclick="selectGrade('1-mid', 'مستوى المبتدئ')" class="p-10 bg-white/5 rounded-[40px] border border-white/10 font-black hover:border-white transition">
-            <i class="fas fa-seedling text-[#c5a059] text-2xl block mb-3"></i>
-            مستوى المبتدئ
-        </button>
-        <button data-grade="2-mid" onclick="selectGrade('2-mid', 'مستوى المتوسط')" class="p-10 bg-white/5 rounded-[40px] border border-white/10 font-black hover:border-white transition">
-            <i class="fas fa-code text-[#c5a059] text-2xl block mb-3"></i>
-            مستوى المتوسط
-        </button>
-        <button data-grade="3-mid" onclick="selectGrade('3-mid', 'مستوى المتقدم')" class="p-10 bg-white/5 rounded-[40px] border border-white/10 font-black hover:border-white transition">
-            <i class="fas fa-fire text-[#c5a059] text-2xl block mb-3"></i>
-            مستوى المتقدم
-        </button>
-        <button data-grade="1-sec" onclick="selectGrade('1-sec', 'Python & البرمجة')" class="p-10 bg-[#c5a059]/10 rounded-[40px] border border-[#c5a059]/30 font-black text-[#c5a059] hover:bg-[#c5a059]/20 transition">
-            <i class="fab fa-python text-2xl block mb-3"></i>
-            Python & البرمجة
-        </button>
-        <button data-grade="2-sec" onclick="selectGrade('2-sec', 'Web Development')" class="p-10 bg-[#c5a059]/10 rounded-[40px] border border-[#c5a059]/30 font-black text-[#c5a059] hover:bg-[#c5a059]/20 transition">
-            <i class="fas fa-globe text-2xl block mb-3"></i>
-            Web Development
-        </button>
-        <button data-grade="3-sec" onclick="selectGrade('3-sec', 'AI & Machine Learning')" class="p-10 bg-[#c5a059]/10 rounded-[40px] border border-[#c5a059]/30 font-black text-[#c5a059] hover:bg-[#c5a059]/20 transition">
-            <i class="fas fa-brain text-2xl block mb-3"></i>
-            AI & Machine Learning
-        </button>
+    <h3 class="text-2xl font-black mb-3 animate__animated animate__fadeInDown">اختر قسمك</h3>
+    <p class="text-gray-500 text-xs mb-10 font-bold">اختر القسم الذي تريد تصفّحه</p>
+    <div id="grade-picker-grid"
+         class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5 w-full max-w-4xl animate__animated animate__zoomIn">
     </div>
 </div>
 
@@ -253,63 +244,53 @@
             <i onclick="closeAdmin()" class="fas fa-times-circle text-2xl md:text-4xl cursor-pointer text-slate-500 hover:text-white transition"></i>
         </div>
 
-        <div class="flex gap-2 mb-6 p-1 bg-black/40 rounded-2xl border border-white/5">
+        <div class="flex gap-2 mb-6 p-1 bg-black/40 rounded-2xl border border-white/5 flex-wrap">
             <button onclick="switchTab('lessons')" id="btn-tab-lessons"
                     class="tab-btn active flex-1 py-3 rounded-xl font-black text-[10px] md:text-sm transition-all duration-300">
-                🎥 إدارة المحتوى
+                🎥 المحتوى
+            </button>
+            <button onclick="switchTab('sections')" id="btn-tab-sections"
+                    class="tab-btn flex-1 py-3 rounded-xl font-black text-[10px] md:text-sm transition-all duration-300">
+                🗂️ الأقسام
             </button>
             <button onclick="switchTab('users')" id="btn-tab-users"
                     class="tab-btn flex-1 py-3 rounded-xl font-black text-[10px] md:text-sm transition-all duration-300">
-                🔐 صلاحيات الوصول
+                🔐 الوصول
             </button>
             <button onclick="switchTab('students')" id="btn-tab-students"
                     class="tab-btn flex-1 py-3 rounded-xl font-black text-[10px] md:text-sm transition-all duration-300">
-                📊 متابعة الطلاب
+                📊 المشتركون
             </button>
         </div>
 
         <!-- تبويب الدروس -->
         <div id="section-lessons">
 
-            <!-- ====== منتقي الصف داخل لوحة الأدمن ====== -->
+            <!-- ====== منتقي القسم داخل لوحة الأدمن ====== -->
             <div class="bg-black/30 rounded-2xl border border-white/5 p-4 mb-4">
                 <p class="text-gray-400 text-xs font-bold mb-3 flex items-center gap-2">
                     <i class="fas fa-layer-group text-[#c5a059]"></i> اختر القسم لعرض وإدارة محتواه:
                 </p>
-                <div id="admin-grade-tabs" class="flex flex-wrap gap-2">
-                    <button onclick="adminSwitchGrade('1-mid')" data-ag="1-mid" class="admin-grade-tab">مبتدئ</button>
-                    <button onclick="adminSwitchGrade('2-mid')" data-ag="2-mid" class="admin-grade-tab">متوسط</button>
-                    <button onclick="adminSwitchGrade('3-mid')" data-ag="3-mid" class="admin-grade-tab">متقدم</button>
-                    <button onclick="adminSwitchGrade('1-sec')" data-ag="1-sec" class="admin-grade-tab">Python</button>
-                    <button onclick="adminSwitchGrade('2-sec')" data-ag="2-sec" class="admin-grade-tab">Web Dev</button>
-                    <button onclick="adminSwitchGrade('3-sec')" data-ag="3-sec" class="admin-grade-tab">AI & ML</button>
-                </div>
+                <div id="admin-grade-tabs" class="flex flex-wrap gap-2"></div>
             </div>
 
             <!-- فورم رفع المحتوى -->
             <div class="grid grid-cols-1 gap-3 bg-[#080c14] p-5 md:p-6 rounded-[20px] border border-white/5 shadow-inner mb-6">
                 <h4 class="font-black text-sm md:text-base mb-1 text-[#c5a059]">رفع محتوى جديد:</h4>
-                <input type="text" id="v-title" placeholder="اسم الدرس أو الصورة" class="p-4 bg-white/5 rounded-xl border border-white/10 outline-none focus:border-[#c5a059] text-sm">
+                <input type="text" id="v-title" placeholder="اسم الدرس أو الملف" class="p-4 bg-white/5 rounded-xl border border-white/10 outline-none focus:border-[#c5a059] text-sm">
                 <input type="text" id="v-url" placeholder="رابط يوتيوب أو جوجل درايف" class="p-4 bg-white/5 rounded-xl border border-white/10 outline-none focus:border-[#c5a059] text-sm">
                 <select id="v-type" class="p-4 bg-[#111827] text-white rounded-xl border border-white/10 outline-none font-bold text-sm">
-                    <option value="video">🎥 محاضرة فيديو</option>
+                    <option value="video">🎥 فيديو</option>
                     <option value="image">🖼️ صورة / مستند</option>
                 </select>
-                <select id="v-grade" class="p-4 bg-[#111827] text-white rounded-xl border border-white/10 outline-none font-bold text-sm">
-                    <option value="1-mid">الأول الإعدادي</option>
-                    <option value="2-mid">الثاني الإعدادي</option>
-                    <option value="3-mid">الثالث الإعدادي</option>
-                    <option value="1-sec">الأول الثانوي</option>
-                    <option value="2-sec">الثاني الثانوي</option>
-                    <option value="3-sec">الثالث الثانوي</option>
-                </select>
+                <select id="v-grade" class="p-4 bg-[#111827] text-white rounded-xl border border-white/10 outline-none font-bold text-sm"></select>
                 <button onclick="publish()" id="pub-btn" class="btn-gold p-5 rounded-2xl font-black text-lg">نشر المحتوى الآن 🚀</button>
             </div>
 
             <!-- قائمة إدارة المحتوى -->
             <div class="delete-section">
                 <h4 class="font-black text-red-500 text-xl mb-4 flex items-center gap-3">
-                    <i class="fas fa-trash-alt"></i> مركز إدارة المحتوى
+                    <i class="fas fa-trash-alt"></i> إدارة المحتوى
                 </h4>
 
                 <!-- بحث وفلترة -->
@@ -344,6 +325,43 @@
             </div>
         </div>
 
+        <!-- تبويب إدارة الأقسام -->
+        <div id="section-sections" class="hidden">
+            <!-- إضافة قسم جديد -->
+            <div class="bg-black/30 rounded-2xl border border-white/5 p-5 mb-5">
+                <h4 class="font-black text-sm text-[#c5a059] mb-4 flex items-center gap-2">
+                    <i class="fas fa-plus-circle"></i> إضافة قسم جديد
+                </h4>
+                <div class="flex flex-col gap-3">
+                    <input type="text" id="new-section-name" placeholder="اسم القسم (مثال: JavaScript Advanced)"
+                        class="p-3 bg-white/5 rounded-xl border border-white/10 outline-none focus:border-[#c5a059] text-sm w-full"
+                        style="font-family:'Cairo',sans-serif;">
+                    <div class="flex gap-2 items-center">
+                        <input type="text" id="new-section-icon" placeholder="أيقونة FontAwesome (مثال: fa-code أو fab fa-python)"
+                            oninput="updateSectionIconPreview()"
+                            class="p-3 bg-white/5 rounded-xl border border-white/10 outline-none focus:border-[#c5a059] text-sm flex-1"
+                            style="font-family:monospace;direction:ltr;">
+                        <div id="new-section-icon-preview"
+                            style="width:44px;height:44px;background:rgba(197,160,89,0.1);border:1px solid rgba(197,160,89,0.2);border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                            <i class="fas fa-code" style="color:#c5a059;font-size:18px;"></i>
+                        </div>
+                    </div>
+                    <button onclick="addNewSection()"
+                        class="btn-gold p-3 rounded-xl font-black text-sm flex items-center justify-center gap-2">
+                        <i class="fas fa-plus"></i> إضافة القسم
+                    </button>
+                </div>
+            </div>
+
+            <!-- قائمة الأقسام -->
+            <div class="bg-black/30 rounded-2xl border border-white/5 p-5">
+                <h4 class="font-black text-sm text-white mb-4 flex items-center gap-2">
+                    <i class="fas fa-layer-group text-[#c5a059]"></i> الأقسام الحالية
+                </h4>
+                <div id="sections-manage-list"></div>
+            </div>
+        </div>
+
         <!-- تبويب المستخدمين -->
         <div id="section-users" class="hidden">
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -360,40 +378,10 @@
                         <option value="master">👨‍💻 مطوّر</option>
                     </select>
 
-                    <!-- صفوف الطالب -->
+                    <!-- أقسام المشترك - ديناميكية -->
                     <div id="user-grades-container" class="mb-4">
                         <label class="block text-gray-400 text-xs mb-2 text-right font-bold">الأقسام المسموح بها:</label>
-                        <div class="grid grid-cols-2 gap-2 bg-black/20 p-3 rounded-xl border border-white/5">
-                            <label class="flex items-center gap-2 cursor-pointer group">
-                                <input type="checkbox" class="grade-check" value="1-mid"
-                                       style="accent-color:#c5a059; width:14px; height:14px; cursor:pointer;">
-                                <span class="text-white text-xs font-bold group-hover:text-[#c5a059] transition">مبتدئ</span>
-                            </label>
-                            <label class="flex items-center gap-2 cursor-pointer group">
-                                <input type="checkbox" class="grade-check" value="2-mid"
-                                       style="accent-color:#c5a059; width:14px; height:14px; cursor:pointer;">
-                                <span class="text-white text-xs font-bold group-hover:text-[#c5a059] transition">متوسط</span>
-                            </label>
-                            <label class="flex items-center gap-2 cursor-pointer group">
-                                <input type="checkbox" class="grade-check" value="3-mid"
-                                       style="accent-color:#c5a059; width:14px; height:14px; cursor:pointer;">
-                                <span class="text-white text-xs font-bold group-hover:text-[#c5a059] transition">متقدم</span>
-                            </label>
-                            <label class="flex items-center gap-2 cursor-pointer group">
-                                <input type="checkbox" class="grade-check" value="1-sec"
-                                       style="accent-color:#c5a059; width:14px; height:14px; cursor:pointer;">
-                                <span class="text-white text-xs font-bold group-hover:text-[#c5a059] transition">Python</span>
-                            </label>
-                            <label class="flex items-center gap-2 cursor-pointer group">
-                                <input type="checkbox" class="grade-check" value="2-sec"
-                                       style="accent-color:#c5a059; width:14px; height:14px; cursor:pointer;">
-                                <span class="text-white text-xs font-bold group-hover:text-[#c5a059] transition">Web Dev</span>
-                            </label>
-                            <label class="flex items-center gap-2 cursor-pointer group">
-                                <input type="checkbox" class="grade-check" value="3-sec"
-                                       style="accent-color:#c5a059; width:14px; height:14px; cursor:pointer;">
-                                <span class="text-white text-xs font-bold group-hover:text-[#c5a059] transition">AI & ML</span>
-                            </label>
+                        <div id="user-grades-checkboxes" class="grid grid-cols-2 gap-2 bg-black/20 p-3 rounded-xl border border-white/5">
                         </div>
                     </div>
 
@@ -631,7 +619,7 @@
 <!-- ====== المحتوى الرئيسي ====== -->
 <main id="app-content" class="hidden container mx-auto px-4 py-6 md:px-6 md:py-12">
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-6 border-r-8 border-[#c5a059] pr-6">
-        <h3 id="grade-title" class="text-lg md:text-3xl font-black">الدروس</h3>
+        <h3 id="grade-title" class="text-lg md:text-3xl font-black">اختر قسماً</h3>
         <div class="relative w-full md:w-80">
             <span class="absolute inset-y-0 right-0 flex items-center pr-4">
                 <i class="fas fa-search text-[#c5a059]"></i>

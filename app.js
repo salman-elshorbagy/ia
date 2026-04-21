@@ -8,6 +8,7 @@ let adminLessonsUnsubscribe = null;
 let currentUserRole = 'student';
 let currentUserAllowedGrades = [];
 let usersDataMap = new Map();
+let allSections = []; // الأقسام الديناميكية من Firestore
 
 // بيانات الدروس المحملة في الذاكرة
 let allLessonsData = { videos: [], images: [] };
@@ -99,7 +100,7 @@ auth.onAuthStateChanged(async (user) => {
 
             // تحديد الصفوف المسموح بها
             if (userRole === 'master') {
-                currentUserAllowedGrades = ['1-mid','2-mid','3-mid','1-sec','2-sec','3-sec'];
+                currentUserAllowedGrades = []; // سيتم تعبئته بعد loadSections()
             } else {
                 currentUserAllowedGrades = userData.allowedGrades || [];
             }
@@ -118,6 +119,7 @@ auth.onAuthStateChanged(async (user) => {
 
             updateUserProfile(user);
             await loadWatchedLessons();
+            await loadSections(); // تحميل الأقسام الديناميكية
 
             // ======= حفظ صورة Google ومعلومات المستخدم للاستخدام في لوحة المتابعة =======
             // نحفظ googleName فقط لو مش موجود عشان ما نكتبش فوق displayName المخصص
@@ -221,6 +223,346 @@ async function loadWatchedLessons() {
     } catch(e) {}
 }
 
+// ============================================
+//  نظام الأقسام الديناميكي
+// ============================================
+const _SECTION_DEFAULTS = [
+    { id: '1-mid', name: 'مستوى المبتدئ',          icon: 'fa-seedling',  iconPrefix: 'fas', order: 1 },
+    { id: '2-mid', name: 'مستوى المتوسط',           icon: 'fa-code',      iconPrefix: 'fas', order: 2 },
+    { id: '3-mid', name: 'مستوى المتقدم',           icon: 'fa-fire',      iconPrefix: 'fas', order: 3 },
+    { id: '1-sec', name: 'Python & البرمجة',        icon: 'fa-python',    iconPrefix: 'fab', order: 4 },
+    { id: '2-sec', name: 'Web Development',         icon: 'fa-globe',     iconPrefix: 'fas', order: 5 },
+    { id: '3-sec', name: 'AI & Machine Learning',   icon: 'fa-brain',     iconPrefix: 'fas', order: 6 },
+];
+
+function getSectionName(id) {
+    return allSections.find(s => s.id === id)?.name || gradeMap[id] || id;
+}
+
+async function loadSections() {
+    try {
+        let snap = await db.collection('sections').orderBy('order', 'asc').get();
+
+        // ترحيل تلقائي: لو المشرف أول مرة والـ collection فارغة
+        if (snap.empty && currentUserRole === 'master') {
+            const batch = db.batch();
+            _SECTION_DEFAULTS.forEach(s => {
+                batch.set(db.collection('sections').doc(s.id), {
+                    name: s.name, icon: s.icon, iconPrefix: s.iconPrefix, order: s.order,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+            });
+            await batch.commit();
+            snap = await db.collection('sections').orderBy('order', 'asc').get();
+        }
+
+        allSections = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    } catch(e) {
+        console.error('[Sections] loadSections error:', e);
+        allSections = _SECTION_DEFAULTS.map(s => ({ ...s }));
+    }
+
+    // تحديث gradeMap و AI_GRADE_MAP ديناميكياً
+    Object.keys(gradeMap).forEach(k => delete gradeMap[k]);
+    allSections.forEach(s => { gradeMap[s.id] = s.name; });
+    if (typeof AI_GRADE_MAP !== 'undefined') {
+        Object.keys(AI_GRADE_MAP).forEach(k => delete AI_GRADE_MAP[k]);
+        allSections.forEach(s => { AI_GRADE_MAP[s.id] = s.name; });
+    }
+
+    // تحديث allowedGrades للمشرف
+    if (currentUserRole === 'master') {
+        currentUserAllowedGrades = allSections.map(s => s.id);
+    }
+
+    // رسم العناصر الديناميكية
+    renderSectionPicker(null);
+    renderAdminGradeTabs();
+    renderVGradeSelect();
+    renderUserPermissionCheckboxes();
+}
+
+function renderSectionPicker(allowedGrades) {
+    const grid = document.getElementById('grade-picker-grid');
+    if (!grid) return;
+    const toShow = allowedGrades
+        ? allSections.filter(s => allowedGrades.includes(s.id))
+        : allSections;
+
+    if (toShow.length === 0) {
+        grid.innerHTML = `<p style="color:rgba(255,255,255,0.4);font-family:'Cairo',sans-serif;font-size:14px;text-align:center;grid-column:1/-1;">لا توجد أقسام متاحة</p>`;
+        return;
+    }
+    grid.innerHTML = toShow.map(s => {
+        const iconCls = `${s.iconPrefix || 'fas'} ${s.icon || 'fa-code'}`;
+        const isGold  = (s.order || 0) >= 4;
+        const cardStyle = isGold
+            ? 'background:rgba(197,160,89,0.08);border:1px solid rgba(197,160,89,0.25);color:#c5a059;'
+            : 'background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:white;';
+        return `<button data-grade="${s.id}"
+            onclick="selectGrade('${s.id}','${s.name.replace(/'/g,"\\'")}')"
+            class="section-picker-card p-8 rounded-[32px] font-black hover:scale-105 transition-all duration-200 flex flex-col items-center gap-3 text-center"
+            style="${cardStyle}cursor:pointer;">
+            <i class="${iconCls}" style="font-size:28px;"></i>
+            <span style="font-family:'Cairo',sans-serif;font-size:15px;line-height:1.3;">${s.name}</span>
+        </button>`;
+    }).join('');
+}
+
+function renderAdminGradeTabs() {
+    const container = document.getElementById('admin-grade-tabs');
+    if (!container) return;
+    container.innerHTML = allSections.map(s =>
+        `<button onclick="adminSwitchGrade('${s.id}')" data-ag="${s.id}" class="admin-grade-tab">${s.name}</button>`
+    ).join('');
+    // إعادة تفعيل الـ active tab الحالي
+    if (adminCurrentGrade) {
+        container.querySelectorAll('[data-ag]').forEach(btn =>
+            btn.classList.toggle('active-ag', btn.dataset.ag === adminCurrentGrade)
+        );
+    }
+}
+
+function renderVGradeSelect() {
+    const sel = document.getElementById('v-grade');
+    if (!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = allSections.map(s =>
+        `<option value="${s.id}">${s.name}</option>`
+    ).join('');
+    if (cur && allSections.some(s => s.id === cur)) sel.value = cur;
+    else if (adminCurrentGrade && allSections.some(s => s.id === adminCurrentGrade)) sel.value = adminCurrentGrade;
+}
+
+function renderUserPermissionCheckboxes() {
+    const container = document.getElementById('user-grades-checkboxes');
+    if (!container) return;
+    container.innerHTML = allSections.map(s => `
+        <label class="flex items-center gap-2 cursor-pointer group">
+            <input type="checkbox" class="grade-check" value="${s.id}"
+                   style="accent-color:#c5a059;width:14px;height:14px;cursor:pointer;">
+            <span class="text-white text-xs font-bold group-hover:text-[#c5a059] transition"
+                  style="font-family:'Cairo',sans-serif;">${s.name}</span>
+        </label>`).join('');
+}
+
+function renderSectionsList() {
+    const container = document.getElementById('sections-manage-list');
+    if (!container) return;
+    if (allSections.length === 0) {
+        container.innerHTML = `<div style="text-align:center;padding:20px;color:rgba(255,255,255,0.3);font-family:'Cairo',sans-serif;font-size:12px;">لا توجد أقسام بعد، أضف قسماً جديداً</div>`;
+        return;
+    }
+    container.innerHTML = allSections.map(s => {
+        const iconCls = `${s.iconPrefix || 'fas'} ${s.icon || 'fa-code'}`;
+        return `
+        <div style="display:flex;align-items:center;gap:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:10px 14px;margin-bottom:6px;">
+            <div style="width:38px;height:38px;background:rgba(197,160,89,0.12);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <i class="${iconCls}" style="color:#c5a059;font-size:16px;"></i>
+            </div>
+            <div style="flex:1;min-width:0;">
+                <p style="color:white;font-family:'Cairo',sans-serif;font-size:12px;font-weight:900;margin:0;">${s.name}</p>
+                <p style="color:rgba(255,255,255,0.2);font-family:'Cairo',sans-serif;font-size:9px;margin:2px 0 0;font-family:monospace;">${s.id}</p>
+            </div>
+            <div style="display:flex;gap:5px;flex-shrink:0;">
+                <button onclick="renameSectionUI('${s.id}','${s.name.replace(/'/g,"\\'")}')"
+                    style="background:rgba(59,130,246,0.15);color:#60a5fa;border:1px solid rgba(59,130,246,0.3);padding:4px 10px;border-radius:7px;font-size:10px;font-weight:700;cursor:pointer;transition:all 0.2s;"
+                    onmouseover="this.style.background='rgba(59,130,246,0.35)'" onmouseout="this.style.background='rgba(59,130,246,0.15)'">
+                    <i class="fas fa-pen"></i>
+                </button>
+                <button onclick="confirmDeleteSection('${s.id}')"
+                    style="background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.25);width:30px;height:30px;border-radius:7px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s;"
+                    onmouseover="this.style.background='rgba(239,68,68,0.3)'" onmouseout="this.style.background='rgba(239,68,68,0.1)'">
+                    <i class="fas fa-trash-alt" style="font-size:10px;"></i>
+                </button>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function updateSectionIconPreview() {
+    const input = document.getElementById('new-section-icon');
+    const preview = document.getElementById('new-section-icon-preview');
+    if (!input || !preview) return;
+    const raw = input.value.trim();
+    let iconCls = 'fas fa-code';
+    if (raw) {
+        if (raw.includes(' ')) {
+            iconCls = raw;
+        } else {
+            const prefix = raw.startsWith('fa-') ? 'fas' : 'fas';
+            const icon   = raw.startsWith('fa-') ? raw : 'fa-' + raw;
+            iconCls = `${prefix} ${icon}`;
+        }
+    }
+    preview.innerHTML = `<i class="${iconCls}" style="color:#c5a059;font-size:20px;"></i>`;
+}
+
+async function addNewSection() {
+    const nameInput = document.getElementById('new-section-name');
+    const iconInput = document.getElementById('new-section-icon');
+    const name = nameInput?.value.trim();
+    const rawIcon = (iconInput?.value.trim() || 'fa-code');
+
+    if (!name) { showToast('اكتب اسم القسم أولاً!', 'warning'); return; }
+
+    let iconPrefix = 'fas';
+    let icon = rawIcon;
+    if (rawIcon.includes(' ')) {
+        const parts = rawIcon.split(' ');
+        iconPrefix = parts[0];
+        icon = parts.slice(1).join(' ');
+    } else {
+        icon = rawIcon.startsWith('fa-') ? rawIcon : 'fa-' + rawIcon;
+    }
+
+    const newId = 'sec_' + Date.now();
+    const maxOrder = allSections.reduce((mx, s) => Math.max(mx, s.order || 0), 0);
+
+    try {
+        await db.collection('sections').doc(newId).set({
+            name, icon, iconPrefix, order: maxOrder + 1,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        showToast('تم إضافة القسم ✅');
+        if (nameInput) nameInput.value = '';
+        if (iconInput) iconInput.value = '';
+        await loadSections();
+        renderSectionsList();
+    } catch(e) {
+        console.error('addNewSection:', e);
+        showToast('حدث خطأ أثناء الإضافة', 'error');
+    }
+}
+
+async function renameSectionUI(sectionId, currentName) {
+    const { value: newName } = await Swal.fire({
+        title: 'إعادة تسمية القسم',
+        input: 'text',
+        inputValue: currentName,
+        inputPlaceholder: 'الاسم الجديد...',
+        showCancelButton: true,
+        confirmButtonText: 'حفظ',
+        cancelButtonText: 'إلغاء',
+        confirmButtonColor: '#c5a059',
+        cancelButtonColor: '#6b7280',
+        background: '#111827', color: '#fff', heightAuto: false,
+        target: document.getElementById('admin-modal'),
+        inputAttributes: { style: "font-family:'Cairo',sans-serif;direction:rtl;text-align:right;" }
+    });
+    if (!newName || !newName.trim() || newName.trim() === currentName) return;
+    try {
+        await db.collection('sections').doc(sectionId).update({ name: newName.trim() });
+        showToast('تم التحديث ✅');
+        await loadSections();
+        renderSectionsList();
+    } catch(e) { showToast('حدث خطأ', 'error'); }
+}
+
+async function confirmDeleteSection(sectionId) {
+    const section = allSections.find(s => s.id === sectionId);
+    if (!section) return;
+
+    const result = await Swal.fire({
+        target: document.getElementById('admin-modal'),
+        title: '⚠️ حذف القسم بالكامل؟',
+        html: `<div style="font-family:'Cairo',sans-serif;direction:rtl;text-align:right;font-size:13px;color:rgba(255,255,255,0.8)">
+            <p style="margin:0 0 10px;">سيتم حذف القسم "<b style="color:#c5a059;">${section.name}</b>" مع:</p>
+            <ul style="margin:0;padding-right:16px;line-height:1.8;color:rgba(255,255,255,0.6)">
+                <li>🎥 جميع الدروس والفيديوهات</li>
+                <li>⭐ جميع التقييمات</li>
+                <li>💬 جميع التعليقات والردود</li>
+                <li>📚 إزالة القسم من صلاحيات المشتركين</li>
+            </ul>
+            <p style="margin:12px 0 0;color:#fca5a5;font-size:12px">⚠️ لا يمكن التراجع</p>
+        </div>`,
+        icon: 'error', showCancelButton: true,
+        confirmButtonColor: '#ef4444', cancelButtonColor: '#6b7280',
+        confirmButtonText: 'نعم، احذف القسم', cancelButtonText: 'تراجع',
+        background: '#111827', color: '#fff', heightAuto: false, scrollbarPadding: false, returnFocus: false
+    });
+    if (!result.isConfirmed) return;
+
+    Swal.fire({
+        target: document.getElementById('admin-modal'),
+        title: 'جاري الحذف...',
+        html: `<div style="font-family:'Cairo',sans-serif;font-size:12px;color:rgba(255,255,255,0.5)">
+            <i class="fas fa-spinner fa-spin" style="font-size:20px;color:#c5a059;display:block;margin-bottom:10px"></i>
+            يتم تنظيف جميع بيانات القسم...
+        </div>`,
+        background: '#111827', color: '#fff', allowOutsideClick: false, showConfirmButton: false, heightAuto: false
+    });
+
+    try {
+        // حذف كل دروس القسم مع بياناتها
+        const lessonsSnap = await db.collection('lessons').where('grade', '==', sectionId).get();
+        for (const lessonDoc of lessonsSnap.docs) {
+            await _deleteLessonAndData(lessonDoc.id);
+        }
+
+        // حذف القسم نفسه
+        await db.collection('sections').doc(sectionId).delete();
+
+        // إزالة القسم من allowedGrades للمستخدمين
+        const usersSnap = await db.collection('users_access').get();
+        const cleanBatch = db.batch();
+        usersSnap.forEach(doc => {
+            if ((doc.data().allowedGrades || []).includes(sectionId)) {
+                cleanBatch.update(doc.ref, {
+                    allowedGrades: firebase.firestore.FieldValue.arrayRemove(sectionId)
+                });
+            }
+        });
+        await cleanBatch.commit();
+
+        await loadSections();
+        renderSectionsList();
+
+        Swal.fire({
+            target: document.getElementById('admin-modal'),
+            title: 'تم الحذف ✅',
+            text: `تم حذف القسم "${section.name}" بالكامل`,
+            icon: 'success', timer: 2500, showConfirmButton: false,
+            background: '#111827', color: '#fff', heightAuto: false
+        });
+    } catch(e) {
+        console.error('confirmDeleteSection:', e);
+        Swal.fire({
+            target: document.getElementById('admin-modal'),
+            title: 'حدث خطأ!', text: 'تعذّر إتمام الحذف', icon: 'error',
+            confirmButtonColor: '#ef4444', background: '#111827', color: '#fff', heightAuto: false
+        });
+    }
+}
+
+// حذف درس صامت (بدون واجهة) مع كل بياناته — يُستخدم في حذف القسم
+async function _deleteLessonAndData(lessonId) {
+    try {
+        const batch = db.batch();
+        batch.delete(db.collection('lessons').doc(lessonId));
+        batch.delete(db.collection('ratings').doc(lessonId));
+
+        const watchedSnap = await db.collection('watched').limit(500).get();
+        watchedSnap.forEach(doc => {
+            batch.update(doc.ref, { lessons: firebase.firestore.FieldValue.arrayRemove(lessonId) });
+        });
+
+        const commentsSnap = await db.collection('comments').doc(lessonId).collection('messages').get();
+        const replyPromises = commentsSnap.docs.map(msgDoc =>
+            db.collection('comments').doc(lessonId)
+              .collection('messages').doc(msgDoc.id)
+              .collection('replies').get()
+              .then(replSnap => { replSnap.forEach(r => batch.delete(r.ref)); })
+        );
+        commentsSnap.forEach(msgDoc => batch.delete(msgDoc.ref));
+        await Promise.all(replyPromises);
+        await batch.commit();
+    } catch(e) {
+        console.error('_deleteLessonAndData error for', lessonId, e);
+    }
+}
+
 
 async function login() {
     try {
@@ -261,22 +603,16 @@ document.addEventListener('click', function(e) {
 //  اختيار الصف
 // ============================================
 function openGradePicker(allowedGrades = null) {
-    const allBtns = document.querySelectorAll('#grade-picker button[data-grade]');
-    if (allowedGrades) {
-        allBtns.forEach(btn => {
-            btn.style.display = allowedGrades.includes(btn.dataset.grade) ? '' : 'none';
-        });
-    } else {
-        allBtns.forEach(btn => btn.style.display = '');
-    }
+    renderSectionPicker(allowedGrades);
     document.getElementById('grade-picker').classList.remove('hidden');
-    if (document.getElementById('drop-menu').style.display === 'flex') toggleMenu();
+    const menu = document.getElementById('drop-menu');
+    if (menu && menu.style.display === 'flex') toggleMenu();
 }
 
 async function selectGrade(id, name) {
-    // حماية: الطالب لا يستطيع اختيار صف خارج صفوفه
+    // حماية: المشترك لا يستطيع اختيار قسم خارج أقسامه
     if (currentUserRole !== 'master' && !currentUserAllowedGrades.includes(id)) {
-        showToast('غير مسموح بهذا الصف!', 'error');
+        showToast('غير مسموح بهذا القسم!', 'error');
         return;
     }
 
@@ -287,17 +623,14 @@ async function selectGrade(id, name) {
     const searchInput = document.getElementById('search-input');
     if (searchInput) searchInput.value = "";
 
-    // إعادة ضبط التاب عند تغيير الصف
+    // إعادة ضبط التاب عند تغيير القسم
     currentContentTab = 'all';
     document.querySelectorAll('.content-tab-btn').forEach(b => b.classList.remove('active'));
     const tabAll = document.getElementById('tab-all');
     if (tabAll) tabAll.classList.add('active');
 
-    const map = {
-        '1-mid':'مستوى المبتدئ','2-mid':'مستوى المتوسط','3-mid':'مستوى المتقدم',
-        '1-sec':'Python & البرمجة','2-sec':'Web Development','3-sec':'AI & Machine Learning'
-    };
-    document.getElementById('grade-title').innerText = "دروس " + (name || map[id]);
+    const sectionName = name || getSectionName(id);
+    document.getElementById('grade-title').innerText = 'محتوى ' + sectionName;
 
     if (auth.currentUser) {
         const userEmail = auth.currentUser.email.toLowerCase();
@@ -388,7 +721,7 @@ function renderLessons() {
 
     if (filteredVideos.length === 0 && filteredImages.length === 0) {
         const msg = currentContentTab === 'video'
-            ? 'لا توجد محاضرات في هذا الصف بعد'
+            ? 'لا توجد فيديوهات في هذا القسم بعد'
             : currentContentTab === 'image'
                 ? 'لا توجد صور أو مواد في هذا الصف بعد'
                 : 'لا توجد محتويات في هذا الصف بعد';
@@ -403,7 +736,7 @@ function renderLessons() {
         if (filteredVideos.length > 0) {
             const videoHeader = document.createElement('div');
             videoHeader.className = 'section-header';
-            videoHeader.innerHTML = '<i class="fas fa-play-circle"></i> المحاضرات';
+            videoHeader.innerHTML = '<i class="fas fa-play-circle"></i> الفيديوهات';
             grid.appendChild(videoHeader);
 
             const videoGrid = document.createElement('div');
@@ -486,7 +819,7 @@ function createCard(item, type) {
         : '<div class="image-icon-overlay"><i class="fas fa-expand-alt"></i></div>';
 
     const btnText = isVideo
-        ? 'مشاهدة المحاضرة <i class="fas fa-play-circle mr-1"></i>'
+        ? 'مشاهدة الفيديو <i class="fas fa-play-circle mr-1"></i>'
         : 'فتح الصورة <i class="fas fa-expand mr-1"></i>';
 
     const isWatched = watchedLessons.has(lessonId);
@@ -621,7 +954,7 @@ function resetAdminForm() {
 // ============================================
 function loadAdminLessons() {
     const list = document.getElementById('admin-lessons-list');
-    const targetGrade = adminCurrentGrade || s_grade || '1-sec';
+    const targetGrade = adminCurrentGrade || s_grade || allSections[0]?.id || '1-sec';
 
     // إعادة ضبط البحث والفلتر عند تغيير الصف
     const searchEl = document.getElementById('admin-content-search');
@@ -786,116 +1119,42 @@ async function deleteDoc(id) {
                 <li>🎥 الدرس نفسه</li>
                 <li>⭐ جميع التقييمات عليه</li>
                 <li>💬 جميع التعليقات والردود</li>
-                <li>📚 إزالة الدرس من سجلات مشاهدات الطلاب</li>
+                <li>📚 إزالة الدرس من سجلات مشاهدات المشتركين</li>
             </ul>
             <p style="margin:12px 0 0;color:#fca5a5;font-size:12px">⚠️ لا يمكن التراجع عن هذه العملية</p>
         </div>`,
-        icon: 'error',
-        showCancelButton: true,
-        confirmButtonColor: '#ef4444',
-        cancelButtonColor: '#6b7280',
-        confirmButtonText: 'نعم، احذف كل شيء',
-        cancelButtonText: 'تراجع',
-        background: '#111827',
-        color: '#fff',
-        heightAuto: false,
-        scrollbarPadding: false,
-        returnFocus: false
+        icon: 'error', showCancelButton: true,
+        confirmButtonColor: '#ef4444', cancelButtonColor: '#6b7280',
+        confirmButtonText: 'نعم، احذف كل شيء', cancelButtonText: 'تراجع',
+        background: '#111827', color: '#fff', heightAuto: false,
+        scrollbarPadding: false, returnFocus: false
     });
 
     if (!result.isConfirmed) return;
 
-    // شاشة تحميل
     Swal.fire({
         title: 'جاري الحذف...',
         html: `<div style="font-family:'Cairo',sans-serif;font-size:12px;color:rgba(255,255,255,0.5)">
             <i class="fas fa-spinner fa-spin" style="font-size:20px;color:#c5a059;display:block;margin-bottom:10px"></i>
             يتم تنظيف جميع البيانات المرتبطة...
         </div>`,
-        background: '#111827',
-        color: '#fff',
-        allowOutsideClick: false,
-        showConfirmButton: false,
-        heightAuto: false
+        background: '#111827', color: '#fff', allowOutsideClick: false, showConfirmButton: false, heightAuto: false
     });
 
     try {
-        // ─── مساعد: تنفيذ batch مع ضمان عدم تجاوز حد 500 عملية ───
-        async function commitSafeBatch(ops) {
-            const LIMIT = 490;
-            for (let i = 0; i < ops.length; i += LIMIT) {
-                const chunk  = ops.slice(i, i + LIMIT);
-                const bLocal = db.batch();
-                chunk.forEach(fn => fn(bLocal));
-                await bLocal.commit();
-            }
-        }
-
-        const deleteOps = [];
-
-        // 1️⃣ حذف الدرس نفسه
-        deleteOps.push(b => b.delete(db.collection("lessons").doc(id)));
-
-        // 2️⃣ حذف وثيقة التقييمات بالكامل (الوثيقة مرتبطة بـ lessonId حصراً)
-        deleteOps.push(b => b.delete(db.collection("ratings").doc(id)));
-
-        // 3️⃣ حذف التعليقات والردود كاملاً
-        const commentsSnap = await db.collection("comments").doc(id)
-            .collection("messages").get();
-
-        for (const msgDoc of commentsSnap.docs) {
-            // جلب كل الردود على هذا التعليق
-            const repliesSnap = await db.collection("comments").doc(id)
-                .collection("messages").doc(msgDoc.id)
-                .collection("replies").get();
-
-            // حذف كل الردود
-            repliesSnap.forEach(replyDoc => {
-                deleteOps.push(b => b.delete(replyDoc.ref));
-            });
-
-            // حذف التعليق نفسه
-            deleteOps.push(b => b.delete(msgDoc.ref));
-        }
-
-        // 4️⃣ إزالة الدرس من سجلات مشاهدات جميع الطلاب
-        // نجلب دفعات بحد أقصى 500 لكل مرة لتجنب الـ read limit
-        const watchedSnap = await db.collection("watched").get();
-        watchedSnap.forEach(doc => {
-            const lessons = doc.data()?.lessons || [];
-            if (lessons.includes(id)) {
-                deleteOps.push(b => b.update(doc.ref, {
-                    lessons: firebase.firestore.FieldValue.arrayRemove(id)
-                }));
-            }
-        });
-
-        // تنفيذ الكل بشكل آمن مع تقسيم تلقائي عند تجاوز 490 عملية
-        await commitSafeBatch(deleteOps);
-
+        await _deleteLessonAndData(id);
         Swal.fire({
-            title: 'تم الحذف ✅',
-            text: 'تم حذف المحتوى وجميع البيانات المرتبطة به',
-            icon: 'success',
-            timer: 2500,
-            showConfirmButton: false,
-            background: '#111827',
-            color: '#fff',
-            heightAuto: false,
+            title: 'تم الحذف ✅', text: 'تم حذف المحتوى وجميع البيانات المرتبطة به',
+            icon: 'success', timer: 2500, showConfirmButton: false,
+            background: '#111827', color: '#fff', heightAuto: false,
         });
-
         showToast("تم الحذف بنجاح ✅");
-
     } catch (e) {
         console.error("deleteDoc error:", e);
         Swal.fire({
-            title: 'حدث خطأ!',
-            text: 'تعذّر إتمام عملية الحذف، حاول مرة أخرى',
-            icon: 'error',
-            confirmButtonColor: '#ef4444',
-            background: '#111827',
-            color: '#fff',
-            heightAuto: false,
+            title: 'حدث خطأ!', text: 'تعذّر إتمام عملية الحذف، حاول مرة أخرى',
+            icon: 'error', confirmButtonColor: '#ef4444',
+            background: '#111827', color: '#fff', heightAuto: false,
         });
         showToast("حدث خطأ أثناء الحذف", "error");
     }
@@ -906,7 +1165,7 @@ async function deleteDoc(id) {
 // ============================================
 function openAdminDirect() {
     // تحديد الصف الافتراضي في الأدمن
-    adminCurrentGrade = s_grade || '1-sec';
+    adminCurrentGrade = s_grade || allSections[0]?.id || '1-sec';
 
     document.getElementById('admin-modal').style.display = 'flex';
     switchTab('lessons');
@@ -934,14 +1193,16 @@ function closeAdmin() {
 
 function switchTab(tabName) {
     const sections = {
-        lessons: document.getElementById('section-lessons'),
-        users:   document.getElementById('section-users'),
-        students:document.getElementById('section-students')
+        lessons:  document.getElementById('section-lessons'),
+        sections: document.getElementById('section-sections'),
+        users:    document.getElementById('section-users'),
+        students: document.getElementById('section-students')
     };
     const btns = {
-        lessons: document.getElementById('btn-tab-lessons'),
-        users:   document.getElementById('btn-tab-users'),
-        students:document.getElementById('btn-tab-students')
+        lessons:  document.getElementById('btn-tab-lessons'),
+        sections: document.getElementById('btn-tab-sections'),
+        users:    document.getElementById('btn-tab-users'),
+        students: document.getElementById('btn-tab-students')
     };
 
     Object.keys(sections).forEach(k => {
@@ -950,6 +1211,7 @@ function switchTab(tabName) {
     });
 
     if (tabName === 'students') loadStudentsMonitor();
+    if (tabName === 'sections') renderSectionsList();
 }
 
 function prepareEditLesson(id, title, url, grade, type) {
@@ -1105,10 +1367,7 @@ function loadUsersList() {
                 ? "color:#ff9068; font-size:9px; font-weight:700;"
                 : "color:#60a5fa; font-size:9px; font-weight:700;";
 
-            const gradeNames = (data.allowedGrades || []).map(g => ({
-                '1-mid':'مبتدئ','2-mid':'متوسط','3-mid':'متقدم',
-                '1-sec':'Python','2-sec':'Web Dev','3-sec':'AI & ML'
-            }[g] || g)).join(' · ');
+            const gradeNames = (data.allowedGrades || []).map(g => getSectionName(g)).join(' · ');
 
             const editBtn = (!isTargetSelf) ? `
                 <button onclick="prepareUserEdit('${targetEmail}', '${targetRole}')"
@@ -1493,6 +1752,7 @@ const gradeMap = {
     '1-mid':'مستوى المبتدئ','2-mid':'مستوى المتوسط','3-mid':'مستوى المتقدم',
     '1-sec':'Python & البرمجة','2-sec':'Web Development','3-sec':'AI & Machine Learning'
 };
+// يتم تحديث gradeMap ديناميكياً من loadSections()
 
 // ============================================
 //  مساعد موحّد: اسم + أفاتار المستخدم
@@ -1560,7 +1820,7 @@ async function openProfile() {
         profileAvatar.onerror = function() { this.onerror = null; this.src = ''; };
     }
     document.getElementById('profile-email').innerText = user.email || '';
-    document.getElementById('profile-grade-text').innerText = gradeMap[s_grade] || '-';
+    document.getElementById('profile-grade-text').innerText = getSectionName(s_grade) || '-';
 
     const userDoc = await db.collection('users_access').doc(user.email.toLowerCase()).get();
     const data = userDoc.data() || {};
@@ -1590,11 +1850,11 @@ async function openProfile() {
     const watchedSet = new Set(allWatched);
     document.getElementById('profile-watched').innerText = allWatched.length;
 
-    // ====== Progress Bars لكل صف ======
+    // ====== Progress Bars لكل قسم ======
     const gradesContainer = document.getElementById('profile-grades-progress');
     if (gradesContainer) {
         const gradesToShow = (role === 'master')
-            ? ['1-mid','2-mid','3-mid','1-sec','2-sec','3-sec']
+            ? allSections.map(s => s.id)
             : data.allowedGrades || [];
 
         if (gradesToShow.length > 0) {
@@ -1631,7 +1891,7 @@ async function openProfile() {
                 <div>
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
                         <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
-                            <span style="color:${isActive?'#c5a059':'rgba(255,255,255,0.8)'};font-family:'Cairo',sans-serif;font-size:12px;font-weight:${isActive?'900':'700'};">${gradeMap[grade]}</span>
+                            <span style="color:${isActive?'#c5a059':'rgba(255,255,255,0.8)'};font-family:'Cairo',sans-serif;font-size:12px;font-weight:${isActive?'900':'700'};">${getSectionName(grade)}</span>
                             ${isActive ? '<span style="background:rgba(197,160,89,0.15);color:#c5a059;font-size:8px;padding:1px 7px;border-radius:10px;font-family:Cairo,sans-serif;font-weight:700;">الحالي</span>' : ''}
                             ${isDone ? '<span style="background:rgba(34,197,94,0.15);color:#22c55e;font-size:8px;padding:1px 7px;border-radius:10px;font-family:Cairo,sans-serif;font-weight:700;">✅ مكتمل</span>' : ''}
                         </div>
@@ -2395,7 +2655,7 @@ async function viewUserProfile(email, displayName, avatar) {
     const role = data.role || 'student';
     const name = resolveUserName(data) || email.split('@')[0];
     const isNewUser = !resolveUserName(data) && !data.photoURL;
-    const roleLabels = { master:'👑 مشرف عام', student:'🎓 طالب' };
+    const roleLabels = { master:'👨‍💻 مطوّر', student:'🎓 مشترك' };
 
     // أفاتار بالمساعد الموحّد
     const profileAvatarHtml = buildAvatarHtml(
@@ -2409,7 +2669,7 @@ async function viewUserProfile(email, displayName, avatar) {
     const watchedSet = new Set(allWatched);
 
     const gradesToShow = role === 'master'
-        ? ['1-mid','2-mid','3-mid','1-sec','2-sec','3-sec']
+        ? allSections.map(s => s.id)
         : (data.allowedGrades || []);
 
     // جلب بيانات الصفوف بالتوازي
@@ -2428,7 +2688,7 @@ async function viewUserProfile(email, displayName, avatar) {
         <div style="margin-bottom:10px;">
             <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
                 <div style="display:flex;align-items:center;gap:5px;">
-                    <span style="color:rgba(255,255,255,0.8);font-family:'Cairo',sans-serif;font-size:11px;font-weight:700;">${gradeMap[grade]}</span>
+                    <span style="color:rgba(255,255,255,0.8);font-family:'Cairo',sans-serif;font-size:11px;font-weight:700;">${getSectionName(grade)}</span>
                     ${isDone ? '<span style="color:#22c55e;font-size:9px;">✅</span>' : ''}
                 </div>
                 <span style="color:rgba(255,255,255,0.4);font-family:'Cairo',sans-serif;font-size:10px;">${watched}/${total}</span>
@@ -2460,15 +2720,15 @@ async function viewUserProfile(email, displayName, avatar) {
                     <p style="color:rgba(255,255,255,0.4);font-size:10px;margin:4px 0 0;">درس شاهده</p>
                 </div>
                 <div style="background:rgba(255,255,255,0.05);border-radius:12px;padding:12px;text-align:center;">
-                    <p style="color:#c5a059;font-size:13px;font-weight:900;margin:0;">${gradeMap[data.lastGrade] || '-'}</p>
-                    <p style="color:rgba(255,255,255,0.4);font-size:10px;margin:4px 0 0;">آخر صف</p>
+                    <p style="color:#c5a059;font-size:13px;font-weight:900;margin:0;">${getSectionName(data.lastGrade) || '-'}</p>
+                    <p style="color:rgba(255,255,255,0.4);font-size:10px;margin:4px 0 0;">آخر قسم</p>
                 </div>
             </div>
             ${gradesToShow.length > 0 ? `
             <div style="background:#0f172a;border:1px solid rgba(197,160,89,0.12);border-radius:14px;padding:14px;margin-bottom:4px;">
                 <div style="display:flex;align-items:center;gap:6px;margin-bottom:12px;">
                     <i class="fas fa-chart-line" style="color:#c5a059;font-size:11px;"></i>
-                    <span style="color:white;font-family:'Cairo',sans-serif;font-weight:900;font-size:12px;">الإنجازات الدراسية</span>
+                    <span style="color:white;font-family:'Cairo',sans-serif;font-weight:900;font-size:12px;">تقدم التعلم</span>
                 </div>
                 ${progressHtml}
             </div>` : ''}
@@ -2549,10 +2809,7 @@ function renderStudentsList(students, watchedMap) {
         );
 
         const count = watchedMap?.[s.email] ?? 0;
-        const gradeNames = (s.allowedGrades || []).map(g => ({
-            '1-mid':'إعدادي١','2-mid':'إعدادي٢','3-mid':'إعدادي٣',
-            '1-sec':'ثانوي١','2-sec':'ثانوي٢','3-sec':'ثانوي٣'
-        }[g] || g)).join(' · ');
+        const gradeNames = (s.allowedGrades || []).map(g => getSectionName(g)).join(' · ');
         const safeName   = displayName.replace(/'/g, "\\'");
         const safeAvatar = (s.photoURL || '').replace(/'/g, "\\'");
 
@@ -2643,10 +2900,7 @@ async function showStudentWatchedDetails(email, name, avatar) {
 
         _swWatchedItems = { all: allWatched, videos: watchedVideos, images: watchedImages };
 
-        const gradeNames = (userData.allowedGrades || []).map(g => ({
-            '1-mid':'إعدادي١','2-mid':'إعدادي٢','3-mid':'إعدادي٣',
-            '1-sec':'ثانوي١','2-sec':'ثانوي٢','3-sec':'ثانوي٣'
-        }[g] || g)).join(' · ');
+        const gradeNames = (userData.allowedGrades || []).map(g => getSectionName(g)).join(' · ');
 
         const html = `
         <div style="font-family:'Cairo',sans-serif;direction:rtl;text-align:right;">
@@ -2738,7 +2992,7 @@ function swSetTab(tab) {
         <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;${idx < items.length - 1 ? 'border-bottom:1px solid rgba(255,255,255,0.04);' : ''}">
             <span style="font-size:11px;flex-shrink:0;">${item.type === 'image' ? '🖼️' : '🎥'}</span>
             <p style="color:rgba(255,255,255,0.82);font-family:'Cairo',sans-serif;font-size:11px;font-weight:700;margin:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${item.title}</p>
-            <span style="color:rgba(255,255,255,0.18);font-family:'Cairo',sans-serif;font-size:8px;white-space:nowrap;flex-shrink:0;">${gradeMap[item.grade] || ''}</span>
+            <span style="color:rgba(255,255,255,0.18);font-family:'Cairo',sans-serif;font-size:8px;white-space:nowrap;flex-shrink:0;">${getSectionName(item.grade) || ''}</span>
         </div>
     `).join('');
 }
