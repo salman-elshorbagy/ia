@@ -126,13 +126,16 @@ async function aiLoadChatsFromFirestore(email) {
 }
 
 // ─── تحميل كل محتوى المنصة من Firestore ──────────────────
-// المشرف: كل الصفوف الستة | الطالب: صفوفه المسموح بها فقط
+// المشرف: كل الأقسام من Firestore ديناميكياً | الطالب: صفوفه المسموح بها فقط
 async function aiLoadPlatformData() {
     const user = auth.currentUser;
     if (!user) return;
 
+    // استخدام allSections الديناميكي للمشرف بدلاً من القائمة الثابتة
     const gradesToLoad = (currentUserRole === 'master')
-        ? ['1-mid','2-mid','3-mid','1-sec','2-sec','3-sec']
+        ? (typeof allSections !== 'undefined' && allSections.length > 0
+            ? allSections.map(s => s.id)
+            : ['1-mid','2-mid','3-mid','1-sec','2-sec','3-sec']) // fallback للقيم القديمة
         : (currentUserAllowedGrades || []);
 
     aiPlatformData = {};

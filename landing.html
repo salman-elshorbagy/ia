@@ -21,6 +21,20 @@
 
     <!-- Landing styles -->
     <link rel="stylesheet" href="landing.css">
+    <style>
+        /* منع تحديد النص على الهاتف عند الضغط المطوّل */
+        body, button, a, p, h1, h2, h3, span, div {
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+            -webkit-touch-callout: none;
+        }
+        /* السماح بالتحديد في حقول الإدخال */
+        input, textarea { -webkit-user-select: text; user-select: text; }
+        /* إخفاء highlight اللون عند الضغط على الهاتف */
+        * { -webkit-tap-highlight-color: transparent; }
+    </style>
 
     <!-- Firebase -->
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
@@ -39,7 +53,7 @@
 <nav class="lp-nav">
     <a href="#" class="lp-nav-logo">
         <img src="logo.png" alt="Logo">
-        <span>Salman El-Shorbagy</span>
+        <span class="lp-nav-name">Salman El-Shorbagy</span>
     </a>
     <button class="lp-nav-cta" onclick="document.getElementById('cta-section').scrollIntoView({behavior:'smooth'})">
         <i class="fab fa-google"></i>
@@ -59,6 +73,10 @@
     <div class="code-float cf-2">def build_future():<br>&nbsp;&nbsp;return ai + code</div>
     <div class="code-float cf-3">&lt;div class="pro"&gt;<br>&nbsp;&nbsp;&lt;/div&gt;</div>
     <div class="code-float cf-4">npm run success</div>
+    <div class="code-float cf-5">git commit -m "🚀"</div>
+    <div class="code-float cf-6">import { AI } from<br>&nbsp;&nbsp;"future"</div>
+    <div class="code-float cf-7">SELECT * FROM<br>&nbsp;&nbsp;skills WHERE level=pro</div>
+    <div class="code-float cf-8">prompt.engineer()<br>&nbsp;&nbsp;.build()</div>
 
     <div class="hero-badge reveal">
         <i class="fas fa-bolt"></i>
@@ -177,7 +195,7 @@
                     <span class="dot-g"></span>
                     <span style="color:rgba(255,255,255,0.2);font-size:11px;margin-right:6px;">salman-ai-chat.py</span>
                 </div>
-<pre style="white-space:pre-wrap;font-size:12px;line-height:1.8;">
+<pre style="white-space:pre-wrap;font-size:12px;line-height:1.8;direction:ltr;text-align:left;unicode-bidi:plaintext;">
 <span class="code-cmt"># مساعد البرمجة الذكي</span>
 <span class="code-key">def</span> <span class="code-fn">ask_ai</span>(question):
     response = <span class="code-fn">ai_model</span>.chat(
@@ -251,6 +269,27 @@ answer = <span class="code-fn">ask_ai</span>(
                 <div class="track-desc">SQL, Firebase, APIs — الجانب الخفي الذي يشغّل كل التطبيقات.</div>
             </div>
         </div>
+        <div class="track-card reveal reveal-delay-3">
+            <div class="track-icon track-icon-red"><i class="fas fa-shield-alt"></i></div>
+            <div>
+                <div class="track-title">Cybersecurity</div>
+                <div class="track-desc">فهم أساسيات أمن المعلومات، كيفية حماية التطبيقات ومنع الاختراقات والثغرات الشائعة.</div>
+            </div>
+        </div>
+        <div class="track-card reveal reveal-delay-4">
+            <div class="track-icon track-icon-amber"><i class="fas fa-magic"></i></div>
+            <div>
+                <div class="track-title">Prompt Engineering</div>
+                <div class="track-desc">إتقان فن التعامل مع نماذج الذكاء الاصطناعي وصياغة الـ Prompts بشكل احترافي لرفع الإنتاجية ×10.</div>
+            </div>
+        </div>
+        <div class="track-card reveal reveal-delay-1">
+            <div class="track-icon track-icon-teal"><i class="fas fa-code-branch"></i></div>
+            <div>
+                <div class="track-title">Git & DevOps</div>
+                <div class="track-desc">إدارة الكود بـ Git وGitHub، مفاهيم CI/CD، و نشر المشاريع على السيرفر الحقيقي.</div>
+            </div>
+        </div>
     </div>
 </section>
 
@@ -261,12 +300,8 @@ answer = <span class="code-fn">ask_ai</span>(
     <div class="inner" style="padding:60px 24px;">
         <div class="stats-row reveal">
             <div class="stat-item">
-                <span class="stat-num" data-count="6" data-suffix="+">0+</span>
+                <span class="stat-num" data-count="8" data-suffix="+">0+</span>
                 <div class="stat-label">مسارات تعليمية</div>
-            </div>
-            <div class="stat-item">
-                <span class="stat-num" data-count="100" data-suffix="+">0+</span>
-                <div class="stat-label">درس وفيديو</div>
             </div>
             <div class="stat-item">
                 <span class="stat-num" data-count="24" data-suffix="/7">0</span>
@@ -275,6 +310,10 @@ answer = <span class="code-fn">ask_ai</span>(
             <div class="stat-item">
                 <span class="stat-num" data-count="100" data-suffix="%">0%</span>
                 <div class="stat-label">محتوى بالعربية</div>
+            </div>
+            <div class="stat-item">
+                <span class="stat-num" style="font-size:clamp(18px,3.5vw,28px);">سعر رمزي</span>
+                <div class="stat-label">للاشتراك في المنصة</div>
             </div>
         </div>
     </div>

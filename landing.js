@@ -120,7 +120,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ── Typing effect ──
     const typingEl = document.getElementById('typing-text');
-    const words = ['مواقع احترافية', 'تطبيقات ذكية', 'مشاريع حقيقية', 'مستقبلك في التقنية'];
+    const words = [
+        'مواقع احترافية',
+        'تطبيقات ذكية',
+        'مشاريع حقيقية',
+        'مستقبلك في التقنية',
+        'بـ Python',
+        'بـ JavaScript',
+        'بـ React',
+        'واجهات مذهلة',
+        'نماذج AI',
+        'APIs قوية',
+        'قواعد بيانات',
+        'أتمتة المهام',
+        'Prompt Engineering',
+        'حلول Cybersecurity',
+        'تطبيقات Full Stack',
+        'مستقبلك الرقمي',
+        'أدوات المطورين',
+        'مشاريع تغير حياتك',
+    ];
     let wIdx = 0, cIdx = 0, deleting = false;
     function typeLoop() {
         const current = words[wIdx];

@@ -186,6 +186,13 @@
 <div id="grade-picker" class="fixed inset-0 z-[8000] hidden overflow-y-auto"
      style="background:linear-gradient(135deg,#060a12 0%,#0c1220 60%,#060a12 100%);">
 
+    <!-- زرار الإغلاق X -->
+    <div class="grade-picker-topbar" id="gp-close-btn-wrap" style="display:none;">
+        <button class="gp-close-btn" onclick="closeGradePicker()" title="رجوع">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+
     <!-- خلفية زجاجية متحركة -->
     <div class="grade-picker-bg-glow"></div>
 
@@ -791,5 +798,30 @@
 <!-- AI Toast -->
 <div class="ai-toast" id="ai-toast"></div>
 
+<!-- ====== منطق زرار X لمنتقي القسم ====== -->
+<script>
+(function() {
+    // انتظر تحميل app.js كاملاً ثم نعمل override
+    window.addEventListener('load', function() {
+        const _origOpen = window.openGradePicker;
+        if (typeof _origOpen === 'function') {
+            window.openGradePicker = function(allowedGrades) {
+                _origOpen.call(window, allowedGrades);
+                const closeWrap = document.getElementById('gp-close-btn-wrap');
+                if (closeWrap) {
+                    // أظهر X فقط لو الطالب سبق له اختيار قسم (يعني مش أول مرة)
+                    closeWrap.style.display = (typeof s_grade !== 'undefined' && s_grade) ? 'block' : 'none';
+                }
+            };
+        }
+    });
+
+    window.closeGradePicker = function() {
+        if (typeof s_grade === 'undefined' || !s_grade) return;
+        const picker = document.getElementById('grade-picker');
+        if (picker) picker.classList.add('hidden');
+    };
+})();
+</script>
 </body>
 </html>
