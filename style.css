@@ -1,9 +1,17 @@
-@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&family=Space+Mono:wght@400;700&display=swap');
 
 :root {
-    --gold: #c5a059;
-    --dark: #080c14;
-    --panel: #111827;
+    --gold:        #c5a059;
+    --gold-light:  #e0c080;
+    --gold-dim:    rgba(197,160,89,0.15);
+    --dark:        #07090f;
+    --dark2:       #0c1018;
+    --panel:       #111827;
+    --surface:     rgba(255,255,255,0.04);
+    --border:      rgba(255,255,255,0.07);
+    --border-gold: rgba(197,160,89,0.22);
+    --text-muted:  rgba(255,255,255,0.45);
+    --radius:      16px;
 }
 
 body {
@@ -24,6 +32,10 @@ body {
 #app-header {
     height: 60px !important;
     padding: 10px 15px !important;
+    background: rgba(7,9,15,0.92) !important;
+    border-bottom: 1px solid var(--border) !important;
+    backdrop-filter: blur(20px) !important;
+    -webkit-backdrop-filter: blur(20px) !important;
 }
 
 /* =========================================
@@ -234,7 +246,9 @@ body {
     display: none;
     position: fixed;
     inset: 0;
-    background: rgba(0,0,0,0.98);
+    background: rgba(4,6,12,0.97);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     z-index: 10000;
     padding: 16px;
     overflow-y: auto;
@@ -243,15 +257,16 @@ body {
 }
 
 .admin-box {
-    background: var(--panel);
-    border: 2px solid var(--gold);
+    background: linear-gradient(160deg, #111827, #0c1220);
+    border: 1px solid var(--border-gold);
     width: 100%;
     max-width: 700px;
-    border-radius: 25px;
+    border-radius: 24px;
     padding: 24px;
     margin: auto;
     max-height: none;
     animation: modalEntry 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    box-shadow: 0 32px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(197,160,89,0.05);
 }
 
 .admin-box input,
@@ -283,11 +298,18 @@ body {
    زرار الذهب العام
    ========================================= */
 .btn-gold {
-    background: linear-gradient(135deg, #c5a059 0%, #edd3a1 100%);
+    background: linear-gradient(135deg, var(--gold) 0%, #a8833e 100%);
     color: #080c14;
     font-weight: 900;
-    box-shadow: 0 8px 20px rgba(197, 160, 89, 0.2);
-    transition: transform 0.15s, box-shadow 0.15s;
+    box-shadow: 0 8px 24px rgba(197,160,89,0.25);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    border: none;
+    cursor: pointer;
+}
+.btn-gold:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 14px 36px rgba(197,160,89,0.38);
+    background: linear-gradient(135deg, var(--gold-light), var(--gold));
 }
 .btn-gold:active { transform: scale(0.97); }
 
@@ -349,15 +371,17 @@ body {
 .section-header {
     font-family: 'Cairo', sans-serif;
     font-weight: 900;
-    font-size: 15px;
+    font-size: 14px;
     color: var(--gold);
-    padding: 8px 4px 12px 4px;
-    border-right: 4px solid var(--gold);
-    padding-right: 14px;
-    margin-bottom: 4px;
+    padding: 10px 14px;
+    border-radius: 12px;
+    background: rgba(197,160,89,0.06);
+    border: 1px solid rgba(197,160,89,0.15);
+    margin-bottom: 8px;
     display: flex;
     align-items: center;
     gap: 8px;
+    letter-spacing: 0.02em;
 }
 
 .section-header:not(:first-child) {
@@ -365,23 +389,35 @@ body {
 }
 
 /* =========================================
-   كارت الدرس
+   كارت الدرس — تصميم Premium
    ========================================= */
 .lesson-card {
-    background: #1a1f2e;
-    border-radius: 12px;
+    background: linear-gradient(145deg, rgba(17,24,39,0.9), rgba(10,14,22,0.95));
+    border-radius: var(--radius);
     overflow: hidden;
     display: flex;
     flex-direction: column;
     height: 100%;
-    border: 1px solid rgba(255,255,255,0.05);
-    transition: border-color 0.25s, transform 0.25s;
+    border: 1px solid var(--border);
+    transition: border-color 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease;
     cursor: pointer;
+    position: relative;
+}
+.lesson-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--gold-dim), transparent);
+    opacity: 0;
+    transition: opacity 0.3s;
 }
 .lesson-card:hover {
-    border-color: var(--gold);
-    transform: translateY(-4px);
+    border-color: var(--border-gold);
+    transform: translateY(-5px);
+    box-shadow: 0 16px 40px rgba(0,0,0,0.4), 0 0 0 1px rgba(197,160,89,0.08);
 }
+.lesson-card:hover::before { opacity: 1; }
 
 /* حاوية الصورة/الفيديو */
 .card-media-box {
@@ -1052,6 +1088,39 @@ body {
 @keyframes modalEntry {
     0% { opacity: 0; transform: scale(0.95) translateY(24px); filter: blur(6px); }
     100% { opacity: 1; transform: scale(1) translateY(0); filter: blur(0); }
+}
+
+@keyframes profileSlideUp {
+    0%   { opacity: 0; transform: translateY(40px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
+
+/* =========================================
+   المحتوى الرئيسي — premium background
+   ========================================= */
+#app-content {
+    position: relative;
+}
+#app-content::before {
+    content: '';
+    position: fixed;
+    top: -20%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 700px; height: 500px;
+    background: radial-gradient(ellipse, rgba(197,160,89,0.04) 0%, transparent 68%);
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* =========================================
+   تابز المحتوى — premium gold style
+   ========================================= */
+.content-tabs-wrap {
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 4px;
 }
 
 /* =========================================

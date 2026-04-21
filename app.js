@@ -2169,72 +2169,75 @@ async function openProfile() {
     const watchedSet = new Set(allWatched);
     document.getElementById('profile-watched').innerText = allWatched.length;
 
-    // ====== Progress Bars لكل قسم ======
+    // ====== مساراتي — عرض الأقسام المتاحة باحترافية ======
     const gradesContainer = document.getElementById('profile-grades-progress');
     if (gradesContainer) {
         const gradesToShow = (role === 'master')
             ? allSections.map(s => s.id)
-            : data.allowedGrades || [];
+            : (data.allowedGrades || []);
 
         if (gradesToShow.length > 0) {
-            gradesContainer.innerHTML = `<div style="background:#0f172a;border:1px solid rgba(197,160,89,0.12);border-radius:16px;overflow:hidden;margin-bottom:12px;">
-                <div style="padding:10px 14px;border-bottom:1px solid rgba(255,255,255,0.05);display:flex;align-items:center;gap:7px;">
-                    <i class="fas fa-chart-line" style="color:#c5a059;font-size:12px;"></i>
-                    <span style="color:white;font-family:'Cairo',sans-serif;font-weight:900;font-size:13px;">تقدمك التعليمي</span>
-                </div>
-                <div id="grade-progress-items" style="padding:14px;display:flex;flex-direction:column;gap:12px;">
-                    <div style="text-align:center;color:rgba(255,255,255,0.3);font-family:'Cairo',sans-serif;font-size:11px;">
-                        <i class="fas fa-spinner fa-spin"></i> جاري التحميل...
+            // إنشاء بطاقات الأقسام بدون أي query إضافي لـ Firebase
+            const sectionsHtml = gradesToShow.map(gId => {
+                const sec     = allSections.find(s => s.id === gId);
+                const name    = sec ? sec.name : getSectionName(gId);
+                const icon    = sec ? `${sec.iconPrefix || 'fas'} ${sec.icon || 'fa-code'}` : 'fas fa-code';
+                const isActive = gId === s_grade;
+                return `
+                <div style="
+                    display:flex;align-items:center;gap:10px;
+                    padding:10px 12px;border-radius:12px;
+                    background:${isActive ? 'rgba(197,160,89,0.08)' : 'rgba(255,255,255,0.03)'};
+                    border:1px solid ${isActive ? 'rgba(197,160,89,0.3)' : 'rgba(255,255,255,0.07)'};
+                    transition:all 0.2s;">
+                    <div style="
+                        width:34px;height:34px;border-radius:10px;flex-shrink:0;
+                        background:${isActive ? 'rgba(197,160,89,0.15)' : 'rgba(255,255,255,0.05)'};
+                        border:1px solid ${isActive ? 'rgba(197,160,89,0.25)' : 'rgba(255,255,255,0.08)'};
+                        display:flex;align-items:center;justify-content:center;">
+                        <i class="${icon}" style="color:${isActive ? '#c5a059' : 'rgba(255,255,255,0.4)'};font-size:14px;"></i>
                     </div>
+                    <span style="
+                        flex:1;font-family:'Cairo',sans-serif;font-size:12px;
+                        font-weight:${isActive ? '900' : '700'};
+                        color:${isActive ? '#e8d0a0' : 'rgba(255,255,255,0.65)'};">${name}</span>
+                    ${isActive ? `<span style="
+                        background:rgba(197,160,89,0.15);color:#c5a059;
+                        font-size:8px;padding:2px 8px;border-radius:20px;
+                        font-family:'Cairo',sans-serif;font-weight:700;flex-shrink:0;">
+                        <i class="fas fa-circle" style="font-size:5px;margin-left:3px;"></i>الحالي
+                    </span>` : ''}
+                </div>`;
+            }).join('');
+
+            gradesContainer.innerHTML = `
+            <div style="
+                background:linear-gradient(135deg,rgba(15,23,42,0.8),rgba(8,12,20,0.9));
+                border:1px solid rgba(197,160,89,0.12);
+                border-radius:18px;overflow:hidden;margin-bottom:12px;">
+                <div style="
+                    padding:11px 14px;
+                    border-bottom:1px solid rgba(255,255,255,0.05);
+                    display:flex;align-items:center;gap:8px;">
+                    <div style="
+                        width:28px;height:28px;border-radius:8px;
+                        background:rgba(197,160,89,0.1);
+                        border:1px solid rgba(197,160,89,0.2);
+                        display:flex;align-items:center;justify-content:center;">
+                        <i class="fas fa-layer-group" style="color:#c5a059;font-size:11px;"></i>
+                    </div>
+                    <span style="color:white;font-family:'Cairo',sans-serif;font-weight:900;font-size:13px;">مساراتي</span>
+                    <span style="
+                        background:rgba(197,160,89,0.12);color:#c5a059;
+                        font-size:9px;padding:2px 8px;border-radius:20px;
+                        font-family:'Cairo',sans-serif;font-weight:700;margin-right:auto;">
+                        ${gradesToShow.length} مسار
+                    </span>
+                </div>
+                <div style="padding:10px;display:flex;flex-direction:column;gap:6px;">
+                    ${sectionsHtml}
                 </div>
             </div>`;
-
-            // جلب بيانات كل صف بالتوازي
-            const gradeDataPromises = gradesToShow.map(async grade => {
-                const snap = await db.collection('lessons').where('grade','==',grade).get();
-                const total = snap.size;
-                const watched = snap.docs.filter(d => watchedSet.has(d.id)).length;
-                return { grade, total, watched };
-            });
-
-            const gradeResults = await Promise.all(gradeDataPromises);
-
-            let itemsHtml = '';
-            gradeResults.forEach(({ grade, total, watched }, idx) => {
-                const pct = total > 0 ? Math.round((watched / total) * 100) : 0;
-                const isActive = grade === s_grade;
-                const isDone = pct === 100 && total > 0;
-                const barColor = isDone ? '#22c55e' : (pct > 60 ? '#c5a059' : '#c5a059');
-
-                itemsHtml += `
-                <div>
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                        <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
-                            <span style="color:${isActive?'#c5a059':'rgba(255,255,255,0.8)'};font-family:'Cairo',sans-serif;font-size:12px;font-weight:${isActive?'900':'700'};">${getSectionName(grade)}</span>
-                            ${isActive ? '<span style="background:rgba(197,160,89,0.15);color:#c5a059;font-size:8px;padding:1px 7px;border-radius:10px;font-family:Cairo,sans-serif;font-weight:700;">الحالي</span>' : ''}
-                            ${isDone ? '<span style="background:rgba(34,197,94,0.15);color:#22c55e;font-size:8px;padding:1px 7px;border-radius:10px;font-family:Cairo,sans-serif;font-weight:700;">✅ مكتمل</span>' : ''}
-                        </div>
-                        <span style="color:rgba(255,255,255,0.45);font-family:'Cairo',sans-serif;font-size:11px;">${watched} / ${total}</span>
-                    </div>
-                    <div style="background:rgba(255,255,255,0.08);border-radius:20px;height:9px;overflow:hidden;position:relative;">
-                        <div class="grade-prog-bar" style="height:100%;width:0%;background:${isDone?'linear-gradient(90deg,#22c55e,#4ade80)':'linear-gradient(90deg,#c5a059,#edd3a1)'};border-radius:20px;transition:width 0.7s ease;" data-target="${pct}"></div>
-                    </div>
-                    <div style="display:flex;justify-content:space-between;margin-top:3px;">
-                        <span style="color:${isDone?'#22c55e':'#c5a059'};font-family:'Cairo',sans-serif;font-size:10px;font-weight:700;">${pct}%</span>
-                        ${total === 0 ? '<span style="color:rgba(255,255,255,0.2);font-family:Cairo,sans-serif;font-size:9px;">لا يوجد محتوى بعد</span>' : ''}
-                    </div>
-                </div>`;
-            });
-
-            const itemsContainer = gradesContainer.querySelector('#grade-progress-items');
-            if (itemsContainer) itemsContainer.innerHTML = itemsHtml;
-
-            // تحريك شريط التقدم
-            setTimeout(() => {
-                gradesContainer.querySelectorAll('.grade-prog-bar').forEach(bar => {
-                    bar.style.width = (bar.dataset.target || '0') + '%';
-                });
-            }, 150);
         } else {
             gradesContainer.innerHTML = '';
         }

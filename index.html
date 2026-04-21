@@ -13,6 +13,7 @@
     <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
@@ -171,11 +172,10 @@
         </div>
 
         <div class="flex flex-col text-left mr-2">
-            <h2 class="font-black text-xs md:text-lg text-[#c5a059] italic leading-tight">
+            <h2 class="font-black text-xs md:text-base italic leading-tight" style="color:#c5a059;letter-spacing:0.01em;">
                 منصة Salman للبرمجة
             </h2>
-            <span class="text-[9px] text-white/40 font-bold tracking-[1px] mt-1 pt-0.5"
-                  style="font-family: 'Arial', sans-serif; border-top: 1px solid rgba(197, 160, 89, 0.2);">
+            <span style="font-size:8px;color:rgba(255,255,255,0.25);font-weight:700;letter-spacing:2px;margin-top:2px;font-family:'Space Mono',monospace;border-top:1px solid rgba(197,160,89,0.15);padding-top:2px;">
                 BY: SALMAN EL-SHORBAGY
             </span>
         </div>
@@ -427,75 +427,101 @@
 
 <!-- ====== ملف الطالب (Profile) ====== -->
 <div id="profile-modal" style="display:none"
-     class="fixed inset-0 z-[15000] bg-[#080c14]/95 backdrop-blur-lg flex items-end sm:items-center justify-center p-0 sm:p-4">
-    <div class="profile-modal-box w-full sm:max-w-md bg-[#111827] border border-white/10 rounded-t-[36px] sm:rounded-[28px] flex flex-col"
-         style="max-height:88vh; max-height:88dvh;">
+     class="fixed inset-0 z-[15000] flex items-end sm:items-center justify-center p-0 sm:p-4"
+     style="background:rgba(4,6,12,0.96);backdrop-filter:blur(16px);">
 
-        <!-- ===== رأس ثابت لا يتحرك ===== -->
-        <div class="flex-shrink-0 flex items-center justify-between px-5 pt-4 pb-3 border-b border-white/5">
-            <div class="flex items-center gap-3">
-                <div class="w-10 h-1 bg-white/20 rounded-full sm:hidden"></div>
-                <span class="hidden sm:block text-[#c5a059] font-black text-sm">ملفي الشخصي</span>
-            </div>
-            <button onclick="closeProfile()"
-                    class="w-9 h-9 bg-white/5 hover:bg-red-500/20 border border-white/10 hover:border-red-500/30 rounded-full text-gray-400 hover:text-red-400 transition-all flex items-center justify-center text-xl flex-shrink-0">×</button>
+    <!-- Backdrop -->
+    <div class="absolute inset-0" style="background:rgba(4,6,12,0.96);backdrop-filter:blur(16px);" onclick="closeProfile()"></div>
+
+    <div class="profile-modal-box w-full sm:max-w-md flex flex-col relative z-10"
+         style="background:linear-gradient(160deg,#111827,#0c1220);
+                border:1px solid rgba(197,160,89,0.2);
+                border-radius:28px 28px 28px 28px;
+                border-bottom-left-radius:0;
+                border-bottom-right-radius:0;
+                max-height:88vh; max-height:88dvh;
+                box-shadow:0 -20px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(197,160,89,0.06);
+                animation:profileSlideUp 0.38s cubic-bezier(0.16,1,0.3,1) both;">
+
+        <!-- Drag handle (mobile) -->
+        <div class="flex justify-center pt-3 pb-1 sm:hidden flex-shrink-0">
+            <div style="width:36px;height:4px;background:rgba(255,255,255,0.15);border-radius:4px;"></div>
         </div>
 
-        <!-- ===== محتوى قابل للتمرير ===== -->
-        <div class="flex-1 overflow-y-auto px-5 py-4" style="-webkit-overflow-scrolling:touch; overscroll-behavior:contain;">
+        <!-- Header -->
+        <div class="flex-shrink-0 flex items-center justify-between px-5 pt-3 pb-3"
+             style="border-bottom:1px solid rgba(255,255,255,0.06);">
+            <div class="flex items-center gap-2">
+                <div style="width:8px;height:8px;border-radius:50%;background:#c5a059;box-shadow:0 0 8px rgba(197,160,89,0.7);"></div>
+                <span style="color:rgba(255,255,255,0.5);font-family:'Cairo',sans-serif;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;">ملفي الشخصي</span>
+            </div>
+            <button onclick="closeProfile()"
+                    style="width:32px;height:32px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:rgba(255,255,255,0.4);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s;"
+                    onmouseover="this.style.background='rgba(239,68,68,0.15)';this.style.color='#f87171'"
+                    onmouseout="this.style.background='rgba(255,255,255,0.05)';this.style.color='rgba(255,255,255,0.4)'">×</button>
+        </div>
 
-            <!-- Avatar + info -->
+        <!-- Scrollable content -->
+        <div class="flex-1 overflow-y-auto px-5 py-5" style="-webkit-overflow-scrolling:touch;overscroll-behavior:contain;">
+
+            <!-- Avatar + Info -->
             <div class="flex flex-col items-center mb-5">
                 <div class="relative mb-3">
-                    <img id="profile-avatar" src="" referrerpolicy="no-referrer"
-                         class="w-[72px] h-[72px] rounded-[18px] border-2 border-[#c5a059] object-cover shadow-xl shadow-[#c5a059]/15">
-                    <div class="absolute -bottom-2 -right-2 w-6 h-6 bg-[#c5a059] rounded-lg flex items-center justify-center shadow-lg">
-                        <i class="fas fa-code text-black" style="font-size:9px;"></i>
+                    <div style="padding:3px;border-radius:22px;background:linear-gradient(135deg,#c5a059,#a8833e);">
+                        <img id="profile-avatar" src="" referrerpolicy="no-referrer"
+                             style="width:68px;height:68px;border-radius:18px;object-fit:cover;display:block;background:#111827;">
+                    </div>
+                    <div style="position:absolute;bottom:-6px;right:-6px;width:24px;height:24px;background:linear-gradient(135deg,#c5a059,#a8833e);border-radius:8px;display:flex;align-items:center;justify-content:center;border:2px solid #0c1220;">
+                        <i class="fas fa-code" style="color:#080c14;font-size:9px;"></i>
                     </div>
                 </div>
-                <h2 id="profile-name" class="text-base font-black text-white mb-0.5"></h2>
-                <p id="profile-email" class="text-gray-500 text-[9px] mb-2 font-mono"></p>
-                <span id="profile-role-badge" class="text-xs font-black px-3 py-1 rounded-full"></span>
+                <h2 id="profile-name" style="font-family:'Cairo',sans-serif;font-size:15px;font-weight:900;color:white;margin:6px 0 2px;"></h2>
+                <p id="profile-email" style="font-family:monospace;font-size:9px;color:rgba(255,255,255,0.3);margin:0 0 8px;"></p>
+                <span id="profile-role-badge"></span>
             </div>
 
             <!-- Stats row -->
             <div class="grid grid-cols-2 gap-3 mb-4">
-                <div class="bg-black/30 rounded-2xl p-3 text-center border border-white/5">
-                    <p class="text-[#c5a059] text-2xl font-black" id="profile-watched">0</p>
-                    <p class="text-gray-400 text-[10px] font-bold mt-0.5">إجمالي المشاهدات</p>
+                <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:14px;text-align:center;">
+                    <p id="profile-watched" style="font-family:'Space Mono',monospace;font-size:28px;font-weight:700;color:#c5a059;line-height:1;margin:0 0 4px;">0</p>
+                    <p style="font-family:'Cairo',sans-serif;font-size:10px;font-weight:700;color:rgba(255,255,255,0.4);margin:0;">إجمالي المشاهدات</p>
                 </div>
-                <div class="bg-black/30 rounded-2xl p-3 text-center border border-white/5">
-                    <p class="text-[#c5a059] text-sm font-black leading-tight" id="profile-grade-text">-</p>
-                    <p class="text-gray-400 text-[10px] font-bold mt-0.5">القسم الحالي</p>
+                <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:14px;text-align:center;">
+                    <p id="profile-grade-text" style="font-family:'Cairo',sans-serif;font-size:12px;font-weight:900;color:#c5a059;line-height:1.3;margin:0 0 4px;">-</p>
+                    <p style="font-family:'Cairo',sans-serif;font-size:10px;font-weight:700;color:rgba(255,255,255,0.4);margin:0;">القسم الحالي</p>
                 </div>
             </div>
 
-            <!-- تقدمك الدراسي لكل صف -->
+            <!-- مساراتي (dynamic) -->
             <div id="profile-grades-progress" class="mb-4"></div>
 
             <!-- تغيير الاسم -->
-            <div class="bg-black/30 rounded-2xl p-4 border border-white/5 mb-3">
-                <p class="text-gray-400 text-[11px] font-bold mb-2 flex items-center gap-2">
-                    <i class="fas fa-pen text-[#c5a059]"></i> الاسم في التعليقات
+            <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.07);border-radius:18px;padding:16px;margin-bottom:10px;">
+                <p style="font-family:'Cairo',sans-serif;font-size:11px;font-weight:700;color:rgba(255,255,255,0.4);margin:0 0 10px;display:flex;align-items:center;gap:6px;">
+                    <i class="fas fa-pen" style="color:#c5a059;font-size:9px;"></i> الاسم في التعليقات
                 </p>
                 <div class="flex gap-2">
                     <input id="profile-display-name-input" type="text" placeholder="اكتب اسمك المخصص..."
-                        class="flex-1 bg-white/5 border border-white/10 rounded-xl text-white text-sm p-2.5 outline-none focus:border-[#c5a059] font-bold"
-                        style="font-family:'Cairo',sans-serif;">
+                        style="flex:1;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;color:white;font-family:'Cairo',sans-serif;font-size:13px;font-weight:700;padding:10px 12px;outline:none;transition:border-color 0.2s;"
+                        onfocus="this.style.borderColor='#c5a059'" onblur="this.style.borderColor='rgba(255,255,255,0.1)'">
                     <button onclick="saveDisplayName()"
-                        class="btn-gold px-4 rounded-xl font-black text-xs flex-shrink-0">حفظ</button>
+                        style="background:linear-gradient(135deg,#c5a059,#a8833e);color:#080c14;border:none;border-radius:12px;padding:0 18px;font-family:'Cairo',sans-serif;font-weight:900;font-size:12px;cursor:pointer;flex-shrink:0;transition:all 0.2s;"
+                        onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform='none'">حفظ</button>
                 </div>
             </div>
 
             <!-- تغيير القسم -->
             <button id="profile-change-grade-btn" onclick="closeProfile(); openGradePicker();"
-                    class="change-grade-btn w-full bg-white/5 hover:bg-white/10 border border-white/10 text-white font-black text-sm py-3 rounded-2xl transition flex items-center justify-center gap-2 mb-3">
-                <i class="fas fa-sync text-[#c5a059]"></i> تغيير القسم
+                    class="change-grade-btn w-full"
+                    style="background:rgba(197,160,89,0.07);border:1px solid rgba(197,160,89,0.2);color:#c5a059;font-family:'Cairo',sans-serif;font-weight:900;font-size:13px;padding:12px;border-radius:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:all 0.22s;margin-bottom:8px;"
+                    onmouseover="this.style.background='rgba(197,160,89,0.14)'" onmouseout="this.style.background='rgba(197,160,89,0.07)'">
+                <i class="fas fa-layer-group"></i> تغيير القسم
             </button>
 
-            <!-- خروج -->
+            <!-- تسجيل الخروج -->
             <button onclick="logout()"
-                    class="w-full bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 font-black text-sm py-3 rounded-2xl transition flex items-center justify-center gap-2 mb-2">
+                    style="width:100%;background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.15);color:rgba(248,113,113,0.8);font-family:'Cairo',sans-serif;font-weight:900;font-size:13px;padding:12px;border-radius:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:all 0.22s;margin-bottom:8px;"
+                    onmouseover="this.style.background='rgba(239,68,68,0.14)';this.style.color='#f87171'" onmouseout="this.style.background='rgba(239,68,68,0.07)';this.style.color='rgba(248,113,113,0.8)'">
                 <i class="fas fa-power-off"></i> تسجيل الخروج
             </button>
         </div>
@@ -620,21 +646,27 @@
 </div><!-- end video-player-modal -->
 
 <!-- ====== المحتوى الرئيسي ====== -->
-<main id="app-content" class="hidden container mx-auto px-4 py-6 md:px-6 md:py-12">
-    <div class="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-6 border-r-8 border-[#c5a059] pr-6">
-        <h3 id="grade-title" class="text-lg md:text-3xl font-black">اختر قسماً</h3>
-        <div class="relative w-full md:w-80">
+<main id="app-content" class="hidden container mx-auto px-4 py-6 md:px-6 md:py-10">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+        <!-- عنوان القسم -->
+        <div class="flex items-center gap-3">
+            <div style="width:4px;height:36px;background:linear-gradient(180deg,#c5a059,rgba(197,160,89,0.2));border-radius:4px;flex-shrink:0;"></div>
+            <h3 id="grade-title" style="font-family:'Cairo',sans-serif;font-size:clamp(16px,4vw,24px);font-weight:900;color:white;margin:0;">اختر قسماً</h3>
+        </div>
+        <!-- بحث -->
+        <div class="relative w-full md:w-72" style="flex-shrink:0;">
             <span class="absolute inset-y-0 right-0 flex items-center pr-4">
-                <i class="fas fa-search text-[#c5a059]"></i>
+                <i class="fas fa-search" style="color:rgba(197,160,89,0.6);font-size:12px;"></i>
             </span>
             <input type="text" id="search-input" onkeyup="filterVideos()"
                 placeholder="ابحث عن درس أو موضوع..."
-                class="w-full bg-white/5 border border-white/10 text-white text-sm rounded-2xl py-3 pr-12 pl-4 outline-none focus:border-[#c5a059] transition-all">
+                style="width:100%;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:white;font-family:'Cairo',sans-serif;font-size:13px;border-radius:16px;padding:11px 40px 11px 16px;outline:none;transition:border-color 0.2s;box-sizing:border-box;"
+                onfocus="this.style.borderColor='rgba(197,160,89,0.45)'" onblur="this.style.borderColor='rgba(255,255,255,0.08)'">
         </div>
     </div>
 
     <!-- ====== تابز عرض المحتوى ====== -->
-    <div class="flex gap-2 mb-6 p-1 bg-black/40 rounded-2xl border border-white/5">
+    <div class="flex gap-2 mb-6 p-1" style="background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.07);border-radius:18px;">
         <button onclick="switchContentTab('all')" id="tab-all"
                 class="content-tab-btn active flex-1 py-2.5 rounded-xl font-black text-xs md:text-sm">
             📋 الكل
