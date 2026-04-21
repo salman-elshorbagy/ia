@@ -228,11 +228,31 @@
 </header>
 
 <!-- ====== منتقي القسم ====== -->
-<div id="grade-picker" class="fixed inset-0 z-[8000] bg-[#080c14] hidden flex flex-col items-center justify-center p-6 text-center overflow-y-auto">
-    <h3 class="text-2xl font-black mb-3 animate__animated animate__fadeInDown">اختر قسمك</h3>
-    <p class="text-gray-500 text-xs mb-10 font-bold">اختر القسم الذي تريد تصفّحه</p>
-    <div id="grade-picker-grid"
-         class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5 w-full max-w-4xl animate__animated animate__zoomIn">
+<div id="grade-picker" class="fixed inset-0 z-[8000] hidden overflow-y-auto"
+     style="background:linear-gradient(135deg,#060a12 0%,#0c1220 60%,#060a12 100%);">
+
+    <!-- خلفية زجاجية متحركة -->
+    <div class="grade-picker-bg-glow"></div>
+
+    <!-- المحتوى الرئيسي -->
+    <div class="grade-picker-inner">
+
+        <!-- رأس الواجهة -->
+        <div class="grade-picker-header">
+            <div class="grade-picker-logo">
+                <i class="fas fa-code"></i>
+            </div>
+            <div>
+                <h2 class="grade-picker-title">اختر قسمك</h2>
+                <p class="grade-picker-sub">حدّد المسار الذي تريد البدء منه</p>
+            </div>
+        </div>
+
+        <!-- الشبكة الديناميكية -->
+        <div id="grade-picker-grid" class="grade-picker-grid"></div>
+
+        <!-- تذييل -->
+        <p class="grade-picker-footer">يمكنك التبديل بين الأقسام في أي وقت</p>
     </div>
 </div>
 
@@ -283,7 +303,8 @@
                     <option value="video">🎥 فيديو</option>
                     <option value="image">🖼️ صورة / مستند</option>
                 </select>
-                <select id="v-grade" class="p-4 bg-[#111827] text-white rounded-xl border border-white/10 outline-none font-bold text-sm"></select>
+                <!-- v-grade مخفي — يُعبَّأ ديناميكياً ويُزامن مع الأقسام أعلاه -->
+                <select id="v-grade" style="display:none;" class="p-4 bg-[#111827] text-white rounded-xl border border-white/10 outline-none font-bold text-sm"></select>
                 <button onclick="publish()" id="pub-btn" class="btn-gold p-5 rounded-2xl font-black text-lg">نشر المحتوى الآن 🚀</button>
             </div>
 
@@ -336,16 +357,25 @@
                     <input type="text" id="new-section-name" placeholder="اسم القسم (مثال: JavaScript Advanced)"
                         class="p-3 bg-white/5 rounded-xl border border-white/10 outline-none focus:border-[#c5a059] text-sm w-full"
                         style="font-family:'Cairo',sans-serif;">
+                    <!-- اختيار الأيقونة بصرياً -->
                     <div class="flex gap-2 items-center">
-                        <input type="text" id="new-section-icon" placeholder="أيقونة FontAwesome (مثال: fa-code أو fab fa-python)"
-                            oninput="updateSectionIconPreview()"
-                            class="p-3 bg-white/5 rounded-xl border border-white/10 outline-none focus:border-[#c5a059] text-sm flex-1"
-                            style="font-family:monospace;direction:ltr;">
-                        <div id="new-section-icon-preview"
-                            style="width:44px;height:44px;background:rgba(197,160,89,0.1);border:1px solid rgba(197,160,89,0.2);border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-                            <i class="fas fa-code" style="color:#c5a059;font-size:18px;"></i>
-                        </div>
+                        <!-- زرار فتح الـ picker -->
+                        <button type="button" onclick="openIconPicker()"
+                            class="flex-1 flex items-center gap-3 p-3 bg-white/5 rounded-xl border border-white/10 hover:border-[#c5a059]/40 transition-all cursor-pointer text-right"
+                            style="font-family:'Cairo',sans-serif;">
+                            <div id="new-section-icon-preview"
+                                style="width:40px;height:40px;background:rgba(197,160,89,0.1);border:1px solid rgba(197,160,89,0.2);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                                <i class="fas fa-code" style="color:#c5a059;font-size:18px;"></i>
+                            </div>
+                            <div class="flex flex-col text-right flex-1 min-w-0">
+                                <span id="icon-picker-label" class="text-white text-xs font-bold">اختر أيقونة</span>
+                                <span class="text-gray-500 text-[10px]">اضغط لتصفح مئات الأيقونات</span>
+                            </div>
+                            <i class="fas fa-chevron-left text-gray-500 text-xs flex-shrink-0"></i>
+                        </button>
                     </div>
+                    <!-- الحقل المخفي الذي تقرأه addNewSection() -->
+                    <input type="text" id="new-section-icon" style="display:none;" value="fa-code">
                     <button onclick="addNewSection()"
                         class="btn-gold p-3 rounded-xl font-black text-sm flex items-center justify-center gap-2">
                         <i class="fas fa-plus"></i> إضافة القسم
@@ -757,6 +787,40 @@
         </div><!-- end ai-body -->
     </div><!-- end ai-full-wrap -->
 </div><!-- end ai-modal -->
+
+<!-- ====== Icon Picker Modal ====== -->
+<div id="icon-picker-modal" style="display:none;position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.75);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:16px;">
+    <div style="background:#111827;border:1px solid rgba(197,160,89,0.2);border-radius:24px;width:100%;max-width:520px;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 32px 80px rgba(0,0,0,0.7);">
+
+        <!-- Header -->
+        <div style="padding:16px 18px;border-bottom:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+            <div>
+                <p style="color:white;font-family:'Cairo',sans-serif;font-weight:900;font-size:14px;margin:0;">اختر أيقونة</p>
+                <p style="color:rgba(255,255,255,0.3);font-family:'Cairo',sans-serif;font-size:10px;margin:3px 0 0;">اضغط على أي أيقونة لاختيارها</p>
+            </div>
+            <button onclick="closeIconPicker()"
+                style="width:34px;height:34px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.5);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <!-- Search -->
+        <div style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.05);flex-shrink:0;position:relative;">
+            <i class="fas fa-search" style="position:absolute;top:50%;left:auto;right:28px;transform:translateY(-50%);color:rgba(197,160,89,0.6);font-size:12px;pointer-events:none;"></i>
+            <input type="text" id="icon-picker-search" placeholder="ابحث باسم الأيقونة بالإنجليزية (مثال: code، python، star)..."
+                oninput="filterIconPicker(this.value)"
+                style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;color:white;font-family:'Cairo',sans-serif;font-size:12px;padding:9px 38px 9px 12px;outline:none;box-sizing:border-box;transition:border-color 0.2s;direction:rtl;"
+                onfocus="this.style.borderColor='rgba(197,160,89,0.45)'" onblur="this.style.borderColor='rgba(255,255,255,0.1)'">
+        </div>
+
+        <!-- Category tabs -->
+        <div id="icon-picker-cats" style="display:flex;gap:5px;padding:10px 16px;overflow-x:auto;flex-shrink:0;border-bottom:1px solid rgba(255,255,255,0.05);"></div>
+
+        <!-- Icons grid -->
+        <div id="icon-picker-grid" style="flex:1;overflow-y:auto;padding:14px 16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(56px,1fr));gap:8px;"></div>
+
+    </div>
+</div>
 
 <!-- AI Toast -->
 <div class="ai-toast" id="ai-toast"></div>

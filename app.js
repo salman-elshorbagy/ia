@@ -121,6 +121,28 @@ auth.onAuthStateChanged(async (user) => {
             await loadWatchedLessons();
             await loadSections(); // تحميل الأقسام الديناميكية
 
+            // ══ التحقق من صحة أقسام المستخدم بعد تحميل الأقسام الحالية ══
+            // يحمي من حالة: أقسام حُذفت بعد آخر دخول للمستخدم
+            if (userRole !== 'master') {
+                const existingIds = new Set(allSections.map(s => s.id));
+                const validGrades = currentUserAllowedGrades.filter(g => existingIds.has(g));
+
+                // لو في أقسام محذوفة - حدّث بيانات المستخدم في Firebase تلقائياً
+                if (validGrades.length !== currentUserAllowedGrades.length) {
+                    currentUserAllowedGrades = validGrades;
+                    try {
+                        await db.collection('users_access').doc(userEmail)
+                            .set({ allowedGrades: validGrades }, { merge: true });
+                    } catch(syncErr) { console.warn('[Section Sync] Failed:', syncErr); }
+                }
+
+                // لو مفيش أقسام متبقية نهائياً — عرض صفحة عدم وجود أقسام
+                if (currentUserAllowedGrades.length === 0) {
+                    showNoSectionsPage();
+                    return;
+                }
+            }
+
             // ======= حفظ صورة Google ومعلومات المستخدم للاستخدام في لوحة المتابعة =======
             // نحفظ googleName فقط لو مش موجود عشان ما نكتبش فوق displayName المخصص
             const updatePayload = { photoURL: user.photoURL || '' };
@@ -159,19 +181,9 @@ auth.onAuthStateChanged(async (user) => {
             } else {
                 // الطالب - محدود بصفوفه فقط
                 if (currentUserAllowedGrades.length === 0) {
-                    await auth.signOut();
-                    showLoginScreen();
-                    await Swal.fire({
-                        title: 'لم يتم تحديد صفك الدراسي!',
-                        text: 'تواصل مع الإدارة لتحديد القسم الخاص بك.',
-                        icon: 'warning',
-                        confirmButtonText: 'حسناً',
-                        background: '#111827',
-                        color: '#fff',
-                        confirmButtonColor: '#c5a059',
-                        heightAuto: false,
-                        allowOutsideClick: false
-                    });
+                    // تم التحقق مسبقاً في بلوك التحقق أعلاه
+                    // هذا كحماية إضافية فقط
+                    showNoSectionsPage();
                     return;
                 } else if (currentUserAllowedGrades.length === 1) {
                     // صف واحد فقط - تحميل تلقائي
@@ -243,24 +255,11 @@ async function loadSections() {
     try {
         let snap = await db.collection('sections').orderBy('order', 'asc').get();
 
-        // ترحيل تلقائي: لو المشرف أول مرة والـ collection فارغة
-        if (snap.empty && currentUserRole === 'master') {
-            const batch = db.batch();
-            _SECTION_DEFAULTS.forEach(s => {
-                batch.set(db.collection('sections').doc(s.id), {
-                    name: s.name, icon: s.icon, iconPrefix: s.iconPrefix, order: s.order,
-                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
-                });
-            });
-            await batch.commit();
-            snap = await db.collection('sections').orderBy('order', 'asc').get();
-        }
-
         allSections = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
     } catch(e) {
         console.error('[Sections] loadSections error:', e);
-        allSections = _SECTION_DEFAULTS.map(s => ({ ...s }));
+        allSections = [];
     }
 
     // تحديث gradeMap و AI_GRADE_MAP ديناميكياً
@@ -291,23 +290,60 @@ function renderSectionPicker(allowedGrades) {
         : allSections;
 
     if (toShow.length === 0) {
-        grid.innerHTML = `<p style="color:rgba(255,255,255,0.4);font-family:'Cairo',sans-serif;font-size:14px;text-align:center;grid-column:1/-1;">لا توجد أقسام متاحة</p>`;
+        grid.innerHTML = `<p style="color:rgba(255,255,255,0.3);font-family:'Cairo',sans-serif;font-size:14px;text-align:center;grid-column:1/-1;padding:40px 0;">لا توجد أقسام متاحة</p>`;
         return;
     }
-    grid.innerHTML = toShow.map(s => {
-        const iconCls = `${s.iconPrefix || 'fas'} ${s.icon || 'fa-code'}`;
-        const isGold  = (s.order || 0) >= 4;
-        const cardStyle = isGold
-            ? 'background:rgba(197,160,89,0.08);border:1px solid rgba(197,160,89,0.25);color:#c5a059;'
-            : 'background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:white;';
-        return `<button data-grade="${s.id}"
-            onclick="selectGrade('${s.id}','${s.name.replace(/'/g,"\\'")}')"
-            class="section-picker-card p-8 rounded-[32px] font-black hover:scale-105 transition-all duration-200 flex flex-col items-center gap-3 text-center"
-            style="${cardStyle}cursor:pointer;">
-            <i class="${iconCls}" style="font-size:28px;"></i>
-            <span style="font-family:'Cairo',sans-serif;font-size:15px;line-height:1.3;">${s.name}</span>
-        </button>`;
-    }).join('');
+
+    // نقسّم الأقسام لمجموعتين: أساسية (order<4) ومتخصصة (order>=4)
+    const basic    = toShow.filter(s => (s.order || 0) < 4);
+    const advanced = toShow.filter(s => (s.order || 0) >= 4);
+
+    let html = '';
+
+    // المستويات الأساسية
+    if (basic.length > 0) {
+        basic.forEach((s, i) => {
+            const iconCls = `${s.iconPrefix || 'fas'} ${s.icon || 'fa-code'}`;
+            html += `<button data-grade="${s.id}"
+                onclick="selectGrade('${s.id}','${s.name.replace(/'/g, "\\'")}')"
+                class="gp-card"
+                style="animation-delay:${i * 0.05}s">
+                <div class="gp-card-icon icon-default">
+                    <i class="${iconCls}"></i>
+                </div>
+                <span class="gp-card-name">${s.name}</span>
+                <span class="gp-card-num">LVL 0${i + 1}</span>
+            </button>`;
+        });
+    }
+
+    // فاصل بين المجموعتين إذا الاثنتين موجودتين
+    if (basic.length > 0 && advanced.length > 0) {
+        html += `<div class="gp-divider">
+            <div class="gp-divider-line"></div>
+            <span class="gp-divider-label">تخصصات</span>
+            <div class="gp-divider-line"></div>
+        </div>`;
+    }
+
+    // التخصصات المتقدمة
+    if (advanced.length > 0) {
+        advanced.forEach((s, i) => {
+            const iconCls = `${s.iconPrefix || 'fas'} ${s.icon || 'fa-code'}`;
+            html += `<button data-grade="${s.id}"
+                onclick="selectGrade('${s.id}','${s.name.replace(/'/g, "\\'")}')"
+                class="gp-card gp-gold"
+                style="animation-delay:${(basic.length + i) * 0.05}s">
+                <div class="gp-card-icon icon-gold">
+                    <i class="${iconCls}"></i>
+                </div>
+                <span class="gp-card-name">${s.name}</span>
+                <span class="gp-card-num">TRACK 0${i + 1}</span>
+            </button>`;
+        });
+    }
+
+    grid.innerHTML = html;
 }
 
 function renderAdminGradeTabs() {
@@ -327,6 +363,29 @@ function renderAdminGradeTabs() {
 function renderVGradeSelect() {
     const sel = document.getElementById('v-grade');
     if (!sel) return;
+
+    // لو مفيش أقسام - عرض رسالة تحذير وتعطيل الحقل
+    if (allSections.length === 0) {
+        sel.innerHTML = '<option value="">— لا توجد أقسام، أنشئ قسماً أولاً —</option>';
+        sel.disabled = true;
+        // تعطيل زرار النشر
+        const pubBtn = document.getElementById('pub-btn');
+        if (pubBtn) {
+            pubBtn.disabled = true;
+            pubBtn.style.opacity = '0.4';
+            pubBtn.title = 'أنشئ قسماً أولاً';
+        }
+        return;
+    }
+
+    // إعادة تفعيل الحقل والزرار لو رجعت أقسام
+    sel.disabled = false;
+    const pubBtn = document.getElementById('pub-btn');
+    if (pubBtn) {
+        pubBtn.disabled = false;
+        pubBtn.style.opacity = '';
+        pubBtn.title = '';
+    }
     const cur = sel.value;
     sel.innerHTML = allSections.map(s =>
         `<option value="${s.id}">${s.name}</option>`
@@ -351,7 +410,15 @@ function renderSectionsList() {
     const container = document.getElementById('sections-manage-list');
     if (!container) return;
     if (allSections.length === 0) {
-        container.innerHTML = `<div style="text-align:center;padding:20px;color:rgba(255,255,255,0.3);font-family:'Cairo',sans-serif;font-size:12px;">لا توجد أقسام بعد، أضف قسماً جديداً</div>`;
+        container.innerHTML = `
+        <div style="background:linear-gradient(135deg,rgba(239,68,68,0.08),rgba(239,68,68,0.04));border:1px solid rgba(239,68,68,0.2);border-radius:14px;padding:20px;text-align:center;margin-bottom:10px;">
+            <i class="fas fa-exclamation-triangle" style="color:#ef4444;font-size:28px;display:block;margin-bottom:10px;"></i>
+            <p style="color:#fca5a5;font-family:'Cairo',sans-serif;font-size:13px;font-weight:900;margin:0 0 6px;">لا توجد أقسام حالياً</p>
+            <p style="color:rgba(255,255,255,0.35);font-family:'Cairo',sans-serif;font-size:11px;margin:0;line-height:1.6;">
+                لن يتمكن أي مشترك من الدخول، ولا يمكن إضافة محتوى.<br>
+                أضف قسماً جديداً من الأداة أعلاه.
+            </p>
+        </div>`;
         return;
     }
     container.innerHTML = allSections.map(s => {
@@ -397,6 +464,220 @@ function updateSectionIconPreview() {
         }
     }
     preview.innerHTML = `<i class="${iconCls}" style="color:#c5a059;font-size:20px;"></i>`;
+}
+
+// ============================================
+//  نظام اختيار الأيقونة — Icon Picker
+// ============================================
+const _ICON_CATEGORIES = {
+    'برمجة': [
+        { cls:'fas fa-code',              label:'code'        },
+        { cls:'fas fa-terminal',          label:'terminal'    },
+        { cls:'fas fa-bug',               label:'bug'         },
+        { cls:'fas fa-database',          label:'database'    },
+        { cls:'fas fa-server',            label:'server'      },
+        { cls:'fas fa-microchip',         label:'chip'        },
+        { cls:'fas fa-laptop-code',       label:'laptop'      },
+        { cls:'fas fa-file-code',         label:'file-code'   },
+        { cls:'fab fa-python',            label:'python'      },
+        { cls:'fab fa-js-square',         label:'js'          },
+        { cls:'fab fa-html5',             label:'html5'       },
+        { cls:'fab fa-css3-alt',          label:'css3'        },
+        { cls:'fab fa-react',             label:'react'       },
+        { cls:'fab fa-node-js',           label:'node-js'     },
+        { cls:'fab fa-git-alt',           label:'git'         },
+        { cls:'fab fa-github',            label:'github'      },
+        { cls:'fab fa-docker',            label:'docker'      },
+        { cls:'fab fa-linux',             label:'linux'       },
+        { cls:'fab fa-php',               label:'php'         },
+        { cls:'fab fa-java',              label:'java'        },
+        { cls:'fab fa-angular',           label:'angular'     },
+        { cls:'fab fa-vuejs',             label:'vue'         },
+        { cls:'fab fa-sass',              label:'sass'        },
+        { cls:'fab fa-npm',               label:'npm'         },
+    ],
+    'ذكاء اصطناعي': [
+        { cls:'fas fa-robot',             label:'robot'       },
+        { cls:'fas fa-brain',             label:'brain'       },
+        { cls:'fas fa-network-wired',     label:'network'     },
+        { cls:'fas fa-atom',              label:'atom'        },
+        { cls:'fas fa-project-diagram',   label:'diagram'     },
+        { cls:'fas fa-wave-square',       label:'wave'        },
+        { cls:'fas fa-eye',               label:'eye'         },
+        { cls:'fas fa-search',            label:'search'      },
+        { cls:'fas fa-chart-line',        label:'chart-line'  },
+        { cls:'fas fa-chart-bar',         label:'chart-bar'   },
+        { cls:'fas fa-chart-pie',         label:'chart-pie'   },
+        { cls:'fas fa-analytics',         label:'analytics'   },
+        { cls:'fas fa-magic',             label:'magic'       },
+        { cls:'fas fa-infinity',          label:'infinity'    },
+        { cls:'fas fa-cogs',              label:'cogs'        },
+    ],
+    'ويب': [
+        { cls:'fas fa-globe',             label:'globe'       },
+        { cls:'fas fa-cloud',             label:'cloud'       },
+        { cls:'fas fa-wifi',              label:'wifi'        },
+        { cls:'fas fa-link',              label:'link'        },
+        { cls:'fas fa-sitemap',           label:'sitemap'     },
+        { cls:'fas fa-shield-alt',        label:'shield'      },
+        { cls:'fas fa-lock',              label:'lock'        },
+        { cls:'fas fa-unlock',            label:'unlock'      },
+        { cls:'fas fa-key',               label:'key'         },
+        { cls:'fas fa-fingerprint',       label:'fingerprint' },
+        { cls:'fas fa-mobile-alt',        label:'mobile'      },
+        { cls:'fas fa-desktop',           label:'desktop'     },
+        { cls:'fas fa-tablet-alt',        label:'tablet'      },
+        { cls:'fas fa-window-maximize',   label:'window'      },
+        { cls:'fab fa-wordpress',         label:'wordpress'   },
+        { cls:'fab fa-shopify',           label:'shopify'     },
+    ],
+    'تعليم': [
+        { cls:'fas fa-graduation-cap',    label:'graduation'  },
+        { cls:'fas fa-book',              label:'book'        },
+        { cls:'fas fa-book-open',         label:'book-open'   },
+        { cls:'fas fa-chalkboard',        label:'board'       },
+        { cls:'fas fa-lightbulb',         label:'lightbulb'   },
+        { cls:'fas fa-pencil-alt',        label:'pencil'      },
+        { cls:'fas fa-pen',               label:'pen'         },
+        { cls:'fas fa-layer-group',       label:'layers'      },
+        { cls:'fas fa-list',              label:'list'        },
+        { cls:'fas fa-tasks',             label:'tasks'       },
+        { cls:'fas fa-clipboard-list',    label:'clipboard'   },
+        { cls:'fas fa-certificate',       label:'cert'        },
+        { cls:'fas fa-award',             label:'award'       },
+        { cls:'fas fa-medal',             label:'medal'       },
+        { cls:'fas fa-trophy',            label:'trophy'      },
+        { cls:'fas fa-star',              label:'star'        },
+    ],
+    'عام': [
+        { cls:'fas fa-fire',              label:'fire'        },
+        { cls:'fas fa-seedling',          label:'seedling'    },
+        { cls:'fas fa-rocket',            label:'rocket'      },
+        { cls:'fas fa-bolt',              label:'bolt'        },
+        { cls:'fas fa-compass',           label:'compass'     },
+        { cls:'fas fa-map',               label:'map'         },
+        { cls:'fas fa-flag',              label:'flag'        },
+        { cls:'fas fa-gamepad',           label:'gamepad'     },
+        { cls:'fas fa-cube',              label:'cube'        },
+        { cls:'fas fa-cubes',             label:'cubes'       },
+        { cls:'fas fa-shapes',            label:'shapes'      },
+        { cls:'fas fa-puzzle-piece',      label:'puzzle'      },
+        { cls:'fas fa-tools',             label:'tools'       },
+        { cls:'fas fa-wrench',            label:'wrench'      },
+        { cls:'fas fa-hammer',            label:'hammer'      },
+        { cls:'fas fa-paint-brush',       label:'brush'       },
+        { cls:'fas fa-palette',           label:'palette'     },
+        { cls:'fas fa-video',             label:'video'       },
+        { cls:'fas fa-film',              label:'film'        },
+        { cls:'fas fa-camera',            label:'camera'      },
+        { cls:'fas fa-music',             label:'music'       },
+        { cls:'fas fa-headphones',        label:'headphones'  },
+        { cls:'fas fa-users',             label:'users'       },
+        { cls:'fas fa-user-graduate',     label:'graduate'    },
+        { cls:'fas fa-user-tie',          label:'tie'         },
+    ],
+};
+
+let _iconPickerCurrentCat = Object.keys(_ICON_CATEGORIES)[0];
+let _iconPickerSelected   = 'fas fa-code';
+
+function openIconPicker() {
+    const modal = document.getElementById('icon-picker-modal');
+    if (!modal) return;
+
+    // بناء التابز
+    const catEl = document.getElementById('icon-picker-cats');
+    if (catEl) {
+        catEl.innerHTML = Object.keys(_ICON_CATEGORIES).map(cat =>
+            `<button class="icon-picker-cat-btn${cat === _iconPickerCurrentCat ? ' active' : ''}"
+                onclick="switchIconCategory('${cat}')">${cat}</button>`
+        ).join('');
+    }
+
+    // رسم الأيقونات
+    _renderIconPickerGrid('');
+
+    // إعادة تعيين البحث
+    const searchEl = document.getElementById('icon-picker-search');
+    if (searchEl) searchEl.value = '';
+
+    modal.style.display = 'flex';
+    lockBodyScroll();
+    setTimeout(() => { if (searchEl) searchEl.focus(); }, 200);
+}
+
+function closeIconPicker() {
+    const modal = document.getElementById('icon-picker-modal');
+    if (modal) modal.style.display = 'none';
+    unlockBodyScroll();
+}
+
+function switchIconCategory(cat) {
+    _iconPickerCurrentCat = cat;
+    // تحديث التابز
+    document.querySelectorAll('.icon-picker-cat-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.innerText === cat);
+    });
+    // مسح البحث وإعادة الرسم
+    const searchEl = document.getElementById('icon-picker-search');
+    if (searchEl) searchEl.value = '';
+    _renderIconPickerGrid('');
+}
+
+function filterIconPicker(query) {
+    _renderIconPickerGrid(query.trim().toLowerCase());
+}
+
+function _renderIconPickerGrid(query) {
+    const grid = document.getElementById('icon-picker-grid');
+    if (!grid) return;
+
+    let icons = [];
+    if (query) {
+        // بحث في كل الفئات
+        Object.values(_ICON_CATEGORIES).forEach(arr => {
+            arr.forEach(ic => {
+                if (ic.label.includes(query) || ic.cls.includes(query)) icons.push(ic);
+            });
+        });
+    } else {
+        icons = _ICON_CATEGORIES[_iconPickerCurrentCat] || [];
+    }
+
+    if (icons.length === 0) {
+        grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:30px;color:rgba(255,255,255,0.25);font-family:'Cairo',sans-serif;font-size:12px;">لا توجد نتائج</div>`;
+        return;
+    }
+
+    grid.innerHTML = icons.map(ic => {
+        const isSelected = ic.cls === _iconPickerSelected;
+        return `<button class="icon-picker-item${isSelected ? ' selected' : ''}"
+            onclick="selectIconForSection('${ic.cls}')"
+            title="${ic.label}">
+            <i class="${ic.cls}"></i>
+            <span>${ic.label}</span>
+        </button>`;
+    }).join('');
+}
+
+function selectIconForSection(iconCls) {
+    _iconPickerSelected = iconCls;
+
+    // تحديث الحقل المخفي
+    const input = document.getElementById('new-section-icon');
+    if (input) input.value = iconCls;
+
+    // تحديث الـ preview
+    const preview = document.getElementById('new-section-icon-preview');
+    if (preview) preview.innerHTML = `<i class="${iconCls}" style="color:#c5a059;font-size:18px;"></i>`;
+
+    // تحديث النص
+    const label = document.getElementById('icon-picker-label');
+    const iconName = iconCls.split(' ').pop().replace('fa-', '');
+    if (label) label.textContent = iconName;
+
+    // إغلاق
+    closeIconPicker();
 }
 
 async function addNewSection() {
@@ -518,6 +799,7 @@ async function confirmDeleteSection(sectionId) {
 
         await loadSections();
         renderSectionsList();
+        checkOrphanedUsersNotification();
 
         Swal.fire({
             target: document.getElementById('admin-modal'),
@@ -899,6 +1181,11 @@ function createCard(item, type) {
 //  نشر/تعديل الدرس أو الصورة
 // ============================================
 async function publish() {
+    // منع رفع محتوى إذا لا توجد أقسام في المنصة
+    if (allSections.length === 0) {
+        return showToast('لا توجد أقسام! أنشئ قسماً أولاً قبل إضافة محتوى 🚫', 'warning');
+    }
+
     const title = document.getElementById('v-title').value.trim();
     const url = document.getElementById('v-url').value.trim();
     const grade = document.getElementById('v-grade').value;
@@ -1174,6 +1461,7 @@ function openAdminDirect() {
     adminSwitchGrade(adminCurrentGrade);
 
     loadUsersList();
+    checkOrphanedUsersNotification();
     lockBodyScroll();
 }
 
@@ -3089,3 +3377,267 @@ document.addEventListener('fullscreenchange', () => {
 
 // دالة مؤقتة للتوافق مع الزرار القديم
 function checkAdmin() { }
+
+// ============================================
+//  صفحة عدم وجود أقسام ─ No Sections Page
+// ============================================
+function showNoSectionsPage() {
+    // إخفاء كل شاشات التطبيق
+    const authScreen = document.getElementById('auth-screen');
+    const appHeader  = document.getElementById('app-header');
+    const appContent = document.getElementById('app-content');
+    if (authScreen)  authScreen.style.display = 'none';
+    if (appHeader)   appHeader.classList.add('hidden');
+    if (appContent)  appContent.classList.add('hidden');
+
+    // تجنب إنشاء الطبقة مرتين
+    if (document.getElementById('no-sections-overlay')) {
+        document.getElementById('no-sections-overlay').style.display = 'flex';
+        lockBodyScroll();
+        return;
+    }
+
+    const overlay = document.createElement('div');
+    overlay.id = 'no-sections-overlay';
+    overlay.style.cssText = [
+        'position:fixed', 'inset:0', 'z-index:9998',
+        'background:linear-gradient(160deg,#080c14 0%,#0f172a 60%,#080c14 100%)',
+        'display:flex', 'flex-direction:column',
+        'align-items:center', 'justify-content:center',
+        'padding:24px', 'overflow:hidden', 'text-align:center'
+    ].join(';');
+
+    overlay.innerHTML = `
+        <!-- خلفية ديكور -->
+        <div style="position:absolute;inset:0;pointer-events:none;overflow:hidden;">
+            <div style="position:absolute;top:-120px;right:-120px;width:400px;height:400px;background:radial-gradient(circle,rgba(197,160,89,0.06) 0%,transparent 70%);border-radius:50%;"></div>
+            <div style="position:absolute;bottom:-100px;left:-100px;width:350px;height:350px;background:radial-gradient(circle,rgba(197,160,89,0.04) 0%,transparent 70%);border-radius:50%;"></div>
+        </div>
+
+        <!-- المحتوى الرئيسي -->
+        <div style="position:relative;z-index:1;max-width:420px;width:100%;">
+
+            <!-- أيقونة الحالة -->
+            <div style="width:90px;height:90px;background:linear-gradient(135deg,rgba(197,160,89,0.12),rgba(197,160,89,0.05));border:1.5px solid rgba(197,160,89,0.3);border-radius:26px;display:flex;align-items:center;justify-content:center;margin:0 auto 24px;box-shadow:0 0 40px rgba(197,160,89,0.08);">
+                <i class="fas fa-layer-group" style="font-size:38px;color:rgba(197,160,89,0.6);"></i>
+            </div>
+
+            <!-- العنوان -->
+            <h1 style="color:white;font-family:'Cairo',sans-serif;font-size:22px;font-weight:900;margin:0 0 10px;letter-spacing:-0.5px;">
+                لا يوجد أقسام متاحة
+            </h1>
+            <p style="color:rgba(255,255,255,0.45);font-family:'Cairo',sans-serif;font-size:13px;font-weight:600;margin:0 0 28px;line-height:1.7;">
+                انتهت صلاحية الوصول لجميع أقسامك الدراسية.<br>
+                تواصل مع إدارة المنصة لتجديد اشتراكك.
+            </p>
+
+            <!-- بطاقة المعلومات -->
+            <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:18px;padding:20px;margin-bottom:24px;text-align:right;">
+                <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:14px;">
+                    <div style="width:36px;height:36px;background:rgba(197,160,89,0.1);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                        <i class="fas fa-info-circle" style="color:#c5a059;font-size:15px;"></i>
+                    </div>
+                    <div>
+                        <p style="color:white;font-family:'Cairo',sans-serif;font-size:12px;font-weight:900;margin:0 0 3px;">ماذا حدث؟</p>
+                        <p style="color:rgba(255,255,255,0.4);font-family:'Cairo',sans-serif;font-size:11px;margin:0;line-height:1.6;">تم حذف أو تعديل الأقسام المرتبطة بحسابك من قِبَل الإدارة.</p>
+                    </div>
+                </div>
+                <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:14px;">
+                    <div style="width:36px;height:36px;background:rgba(34,197,94,0.1);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                        <i class="fas fa-check-circle" style="color:#22c55e;font-size:15px;"></i>
+                    </div>
+                    <div>
+                        <p style="color:white;font-family:'Cairo',sans-serif;font-size:12px;font-weight:900;margin:0 0 3px;">الحل</p>
+                        <p style="color:rgba(255,255,255,0.4);font-family:'Cairo',sans-serif;font-size:11px;margin:0;line-height:1.6;">تواصل مع إدارة المنصة لإضافة قسم جديد لحسابك.</p>
+                    </div>
+                </div>
+                <div style="display:flex;align-items:flex-start;gap:12px;">
+                    <div style="width:36px;height:36px;background:rgba(99,102,241,0.1);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                        <i class="fas fa-clock" style="color:#818cf8;font-size:15px;"></i>
+                    </div>
+                    <div>
+                        <p style="color:white;font-family:'Cairo',sans-serif;font-size:12px;font-weight:900;margin:0 0 3px;">بعد التجديد</p>
+                        <p style="color:rgba(255,255,255,0.4);font-family:'Cairo',sans-serif;font-size:11px;margin:0;line-height:1.6;">أعد تحميل الصفحة وسيفتح حسابك تلقائياً.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- أزرار التواصل -->
+            <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:24px;">
+                <!-- واتساب -->
+                <a href="https://wa.me/201070401282" target="_blank"
+                   style="display:flex;align-items:center;justify-content:center;gap:12px;background:linear-gradient(135deg,rgba(37,211,102,0.12),rgba(37,211,102,0.06));border:1px solid rgba(37,211,102,0.3);border-radius:14px;padding:14px 20px;text-decoration:none;transition:all 0.3s;cursor:pointer;"
+                   onmouseover="this.style.background='linear-gradient(135deg,rgba(37,211,102,0.2),rgba(37,211,102,0.1))';this.style.borderColor='rgba(37,211,102,0.5)'"
+                   onmouseout="this.style.background='linear-gradient(135deg,rgba(37,211,102,0.12),rgba(37,211,102,0.06))';this.style.borderColor='rgba(37,211,102,0.3)'">
+                    <div style="width:44px;height:44px;background:rgba(37,211,102,0.15);border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                        <i class="fab fa-whatsapp" style="color:#25D366;font-size:24px;"></i>
+                    </div>
+                    <div style="text-align:right;">
+                        <p style="color:white;font-family:'Cairo',sans-serif;font-size:13px;font-weight:900;margin:0;">تواصل مع الإدارة</p>
+                        <p style="color:rgba(37,211,102,0.8);font-family:'Cairo',sans-serif;font-size:10px;font-weight:700;margin:2px 0 0;">Salman El-Shorbagy — واتساب</p>
+                    </div>
+                    <i class="fas fa-arrow-left" style="color:rgba(37,211,102,0.5);font-size:12px;margin-right:auto;"></i>
+                </a>
+
+                <!-- زرار تسجيل الخروج -->
+                <button onclick="auth.signOut().then(()=>location.reload())"
+                    style="display:flex;align-items:center;justify-content:center;gap:8px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:12px 20px;color:rgba(255,255,255,0.4);font-family:'Cairo',sans-serif;font-size:12px;font-weight:700;cursor:pointer;transition:all 0.2s;"
+                    onmouseover="this.style.background='rgba(255,255,255,0.06)';this.style.color='rgba(255,255,255,0.7)'"
+                    onmouseout="this.style.background='rgba(255,255,255,0.03)';this.style.color='rgba(255,255,255,0.4)'">
+                    <i class="fas fa-sign-out-alt"></i>
+                    تسجيل الخروج والعودة لاحقاً
+                </button>
+            </div>
+
+            <!-- فوتر -->
+            <div style="border-top:1px solid rgba(255,255,255,0.05);padding-top:16px;">
+                <p style="color:rgba(255,255,255,0.15);font-family:'Cairo',sans-serif;font-size:10px;margin:0;">
+                    منصة Salman El-Shorbagy للبرمجة والذكاء الاصطناعي<br>
+                    <span style="font-family:monospace;letter-spacing:1px;font-size:9px;">© 2026 All Rights Reserved</span>
+                </p>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(overlay);
+    lockBodyScroll();
+
+    // منع زرار الرجوع من الخروج من الصفحة
+    history.pushState(null, null, window.location.pathname);
+    window.addEventListener('popstate', _noSectionsPopHandler);
+}
+
+function _noSectionsPopHandler() {
+    history.pushState(null, null, window.location.pathname);
+}
+
+// ============================================
+//  إشعارات لوحة التحكم — مشتركون بأقسام محذوفة
+// ============================================
+async function checkOrphanedUsersNotification() {
+    if (currentUserRole !== 'master') return;
+
+    // إزالة أي إشعار قديم أولاً
+    const oldNote = document.getElementById('admin-orphan-notification');
+    if (oldNote) oldNote.remove();
+
+    try {
+        const existingIds = new Set(allSections.map(s => s.id));
+        const usersSnap   = await db.collection('users_access').get();
+
+        const orphanedEmails = [];
+        usersSnap.forEach(doc => {
+            const data = doc.data();
+            if (data.role === 'master') return;
+            const grades = data.allowedGrades || [];
+            const hasDeleted = grades.some(g => !existingIds.has(g));
+            if (hasDeleted) orphanedEmails.push(doc.id);
+        });
+
+        if (orphanedEmails.length === 0) return;
+
+        // بناء شريط الإشعار وحقنه في صندوق الأدمن
+        const adminBox = document.querySelector('#admin-modal .admin-box');
+        if (!adminBox) return;
+
+        const notification = document.createElement('div');
+        notification.id    = 'admin-orphan-notification';
+        notification.style.cssText = [
+            'position:sticky', 'top:0', 'z-index:200',
+            'background:linear-gradient(90deg,rgba(239,68,68,0.12),rgba(239,68,68,0.06))',
+            'border:1px solid rgba(239,68,68,0.28)', 'border-radius:12px',
+            'padding:10px 14px', 'margin:0 0 12px 0',
+            'display:flex', 'align-items:center', 'gap:10px',
+            'font-family:Cairo,sans-serif', 'direction:rtl'
+        ].join(';');
+
+        const emailList = orphanedEmails.slice(0, 3).join('، ');
+        const extra     = orphanedEmails.length > 3 ? ` و${orphanedEmails.length - 3} آخرين` : '';
+
+        notification.innerHTML = `
+            <i class="fas fa-exclamation-triangle" style="color:#ef4444;font-size:18px;flex-shrink:0;"></i>
+            <div style="flex:1;min-width:0;">
+                <p style="color:#fca5a5;font-size:12px;font-weight:900;margin:0;">
+                    ⚠️ ${orphanedEmails.length} مشترك بأقسام محذوفة
+                </p>
+                <p style="color:rgba(255,255,255,0.35);font-size:10px;margin:3px 0 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                    ${emailList}${extra}
+                </p>
+                <p style="color:rgba(255,255,255,0.25);font-size:9px;margin:2px 0 0;">
+                    هؤلاء المشتركون لن يتمكنوا من الدخول حتى تُضاف لهم أقسام جديدة
+                </p>
+            </div>
+            <button onclick="showOrphanedUsersList()"
+                style="background:rgba(239,68,68,0.2);color:#ef4444;border:1px solid rgba(239,68,68,0.35);padding:6px 12px;border-radius:8px;font-size:10px;font-weight:900;cursor:pointer;white-space:nowrap;flex-shrink:0;font-family:Cairo,sans-serif;transition:all 0.2s;"
+                onmouseover="this.style.background='rgba(239,68,68,0.35)'"
+                onmouseout="this.style.background='rgba(239,68,68,0.2)'">
+                <i class="fas fa-users"></i> عرض الكل
+            </button>
+        `;
+
+        adminBox.insertBefore(notification, adminBox.firstChild);
+        // حفظ القائمة الكاملة للاستخدام في showOrphanedUsersList
+        notification.dataset.emails = JSON.stringify(orphanedEmails);
+
+    } catch(e) {
+        console.error('[OrphanCheck]', e);
+    }
+}
+
+// عرض قائمة المشتركين المتضررين
+async function showOrphanedUsersList() {
+    const notification = document.getElementById('admin-orphan-notification');
+    if (!notification) return;
+
+    let emails = [];
+    try { emails = JSON.parse(notification.dataset.emails || '[]'); } catch(e) {}
+    if (!emails.length) return;
+
+    const existingIds = new Set(allSections.map(s => s.id));
+
+    // جلب بيانات كل مشترك
+    const rows = await Promise.all(emails.map(async email => {
+        try {
+            const doc   = await db.collection('users_access').doc(email).get();
+            const data  = doc.data() || {};
+            const name  = data.displayName || data.googleName || email;
+            const grades = (data.allowedGrades || []);
+            const deleted = grades.filter(g => !existingIds.has(g));
+            const valid   = grades.filter(g =>  existingIds.has(g));
+            return { email, name, deleted, valid };
+        } catch(e) { return { email, name: email, deleted: [], valid: [] }; }
+    }));
+
+    let html = `<div style="font-family:'Cairo',sans-serif;direction:rtl;text-align:right;max-height:55vh;overflow-y:auto;">
+        <p style="color:rgba(255,255,255,0.4);font-size:11px;margin:0 0 14px;">المشتركون الذين يمتلكون أقسام محذوفة في بياناتهم:</p>`;
+
+    rows.forEach(r => {
+        const deletedNames = r.deleted.map(id => `<code style="background:rgba(239,68,68,0.15);color:#fca5a5;padding:1px 5px;border-radius:4px;font-size:9px;">${id}</code>`).join(' ');
+        html += `
+        <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:10px 12px;margin-bottom:8px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:5px;">
+                <span style="color:white;font-size:11px;font-weight:900;">${r.name}</span>
+                <span style="color:rgba(255,255,255,0.3);font-size:9px;direction:ltr;">${r.email}</span>
+            </div>
+            <div style="font-size:10px;margin-bottom:4px;">
+                <span style="color:#fca5a5;font-weight:700;">محذوف: </span>${deletedNames || '—'}
+            </div>
+            ${r.valid.length ? `<div style="font-size:10px;color:rgba(255,255,255,0.3);">
+                <span style="color:#86efac;font-weight:700;">صالح: </span>
+                ${r.valid.map(id => getSectionName(id)).join(' ، ')}
+            </div>` : '<div style="font-size:10px;color:#ef4444;font-weight:700;">⚠️ لا يوجد أقسام صالحة — المشترك محجوب</div>'}
+        </div>`;
+    });
+
+    html += '</div>';
+
+    await Swal.fire({
+        target: document.getElementById('admin-modal'),
+        title: `⚠️ ${emails.length} مشترك متضرر`,
+        html,
+        background: '#111827', color: '#fff',
+        confirmButtonText: 'فهمت',
+        confirmButtonColor: '#c5a059',
+        heightAuto: false
+    });
+}

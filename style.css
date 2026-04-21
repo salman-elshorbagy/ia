@@ -597,33 +597,320 @@ body {
 }
 
 /* =========================================
-   منتقي الصف
+   منتقي القسم — تصميم احترافي زجاجي
    ========================================= */
-@media (max-width: 768px) {
-    #grade-picker {
-        padding: 20px 15px !important;
-        justify-content: flex-start !important;
-        padding-top: 60px !important;
-    }
-    #grade-picker h3 {
-        font-size: 18px !important;
-        margin-bottom: 25px !important;
-        line-height: 1.5 !important;
-    }
-    #grade-picker .grid {
-        grid-template-columns: repeat(2, 1fr) !important;
-        gap: 12px !important;
-    }
-    #grade-picker button {
-        padding: 15px 10px !important;
-        border-radius: 20px !important;
-        font-size: 13px !important;
-        min-height: 70px !important;
-        display: flex !important;
-        align-items: center;
-        justify-content: center;
-    }
+
+/* خلفية الـ glow المتحركة */
+.grade-picker-bg-glow {
+    position: fixed;
+    top: -30%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 600px;
+    height: 600px;
+    background: radial-gradient(ellipse, rgba(197,160,89,0.08) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
 }
+
+/* الحاوية الداخلية */
+.grade-picker-inner {
+    position: relative;
+    z-index: 1;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px 60px;
+}
+
+/* الهيدر */
+.grade-picker-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 40px;
+    text-align: right;
+}
+
+.grade-picker-logo {
+    width: 52px;
+    height: 52px;
+    border-radius: 16px;
+    background: linear-gradient(135deg, rgba(197,160,89,0.25), rgba(197,160,89,0.06));
+    border: 1px solid rgba(197,160,89,0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    color: #c5a059;
+    flex-shrink: 0;
+    box-shadow: 0 0 30px rgba(197,160,89,0.12);
+}
+
+.grade-picker-title {
+    font-family: 'Cairo', sans-serif;
+    font-size: 22px;
+    font-weight: 900;
+    color: white;
+    margin: 0 0 4px;
+    line-height: 1.2;
+}
+
+.grade-picker-sub {
+    font-family: 'Cairo', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    color: rgba(255,255,255,0.3);
+    margin: 0;
+}
+
+/* الشبكة */
+.grade-picker-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    width: 100%;
+    max-width: 680px;
+    animation: gpGridIn 0.4s cubic-bezier(0.16,1,0.3,1) both;
+}
+@keyframes gpGridIn {
+    from { opacity:0; transform:translateY(24px); }
+    to   { opacity:1; transform:translateY(0); }
+}
+
+/* كارت القسم */
+.gp-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 24px 12px 20px;
+    border-radius: 20px;
+    cursor: pointer;
+    border: 1px solid rgba(255,255,255,0.07);
+    background: rgba(255,255,255,0.03);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    transition: all 0.22s cubic-bezier(0.16,1,0.3,1);
+    text-align: center;
+    overflow: hidden;
+}
+.gp-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(135deg, rgba(255,255,255,0.04) 0%, transparent 60%);
+    pointer-events: none;
+}
+.gp-card:hover {
+    border-color: rgba(197,160,89,0.35);
+    background: rgba(197,160,89,0.06);
+    transform: translateY(-5px);
+    box-shadow: 0 16px 40px rgba(0,0,0,0.35), 0 0 0 1px rgba(197,160,89,0.15);
+}
+.gp-card:active {
+    transform: scale(0.97) translateY(-2px);
+}
+
+/* كارد المستوى الذهبي */
+.gp-card.gp-gold {
+    border-color: rgba(197,160,89,0.18);
+    background: rgba(197,160,89,0.05);
+}
+.gp-card.gp-gold:hover {
+    border-color: rgba(197,160,89,0.45);
+    background: rgba(197,160,89,0.1);
+    box-shadow: 0 16px 40px rgba(0,0,0,0.35), 0 0 24px rgba(197,160,89,0.12);
+}
+
+/* أيقونة الكارد */
+.gp-card-icon {
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    flex-shrink: 0;
+    transition: transform 0.22s ease;
+}
+.gp-card:hover .gp-card-icon { transform: scale(1.1); }
+
+.gp-card-icon.icon-default {
+    background: rgba(255,255,255,0.06);
+    color: rgba(255,255,255,0.7);
+}
+.gp-card-icon.icon-gold {
+    background: rgba(197,160,89,0.12);
+    color: #c5a059;
+}
+
+/* اسم القسم */
+.gp-card-name {
+    font-family: 'Cairo', sans-serif;
+    font-size: 13px;
+    font-weight: 900;
+    color: white;
+    line-height: 1.35;
+}
+.gp-card.gp-gold .gp-card-name { color: #edd3a1; }
+
+/* رقم الكارد */
+.gp-card-num {
+    font-size: 9px;
+    font-weight: 700;
+    font-family: monospace;
+    color: rgba(255,255,255,0.2);
+    letter-spacing: 1px;
+}
+
+/* فاصل اختياري */
+.gp-divider {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 6px 0;
+}
+.gp-divider-line {
+    flex: 1;
+    height: 1px;
+    background: rgba(255,255,255,0.07);
+}
+.gp-divider-label {
+    font-family: 'Cairo', sans-serif;
+    font-size: 9px;
+    font-weight: 700;
+    color: rgba(255,255,255,0.2);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+/* التذييل */
+.grade-picker-footer {
+    margin-top: 32px;
+    font-family: 'Cairo', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    color: rgba(255,255,255,0.18);
+    text-align: center;
+}
+
+/* Mobile adjustments */
+@media (max-width: 480px) {
+    .grade-picker-inner { padding: 30px 16px 50px; }
+    .grade-picker-header { margin-bottom: 28px; }
+    .grade-picker-title { font-size: 18px; }
+    .grade-picker-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+        max-width: 100%;
+    }
+    .gp-card { padding: 18px 10px 16px; border-radius: 16px; gap: 9px; }
+    .gp-card-icon { width: 44px; height: 44px; font-size: 19px; border-radius: 12px; }
+    .gp-card-name { font-size: 11px; }
+}
+
+@media (max-width: 360px) {
+    .grade-picker-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .gp-card { padding: 14px 8px; }
+}
+
+/* Tablet — 3 columns */
+@media (min-width: 481px) and (max-width: 767px) {
+    .grade-picker-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* Desktop — max 3 cols, wider cards */
+@media (min-width: 768px) {
+    .grade-picker-grid { grid-template-columns: repeat(3, 1fr); max-width: 640px; gap: 16px; }
+    .gp-card { padding: 28px 16px 24px; border-radius: 22px; }
+    .gp-card-icon { width: 58px; height: 58px; font-size: 24px; }
+    .gp-card-name { font-size: 14px; }
+}
+
+/* =========================================
+   Icon Picker — نافذة اختيار الأيقونة
+   ========================================= */
+
+#icon-picker-modal[style*="display:flex"] {
+    display: flex !important;
+}
+
+.icon-picker-cat-btn {
+    padding: 5px 12px;
+    border-radius: 20px;
+    border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.04);
+    color: rgba(255,255,255,0.5);
+    font-family: 'Cairo', sans-serif;
+    font-size: 10px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.18s;
+    flex-shrink: 0;
+}
+.icon-picker-cat-btn.active {
+    background: #c5a059;
+    color: #080c14;
+    border-color: #c5a059;
+}
+.icon-picker-cat-btn:hover:not(.active) {
+    border-color: rgba(197,160,89,0.35);
+    color: #c5a059;
+}
+
+.icon-picker-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    padding: 10px 4px 8px;
+    border-radius: 12px;
+    border: 1px solid transparent;
+    background: rgba(255,255,255,0.03);
+    cursor: pointer;
+    transition: all 0.16s;
+    aspect-ratio: 1;
+}
+.icon-picker-item:hover {
+    background: rgba(197,160,89,0.1);
+    border-color: rgba(197,160,89,0.3);
+    transform: scale(1.08);
+}
+.icon-picker-item.selected {
+    background: rgba(197,160,89,0.18);
+    border-color: #c5a059;
+}
+.icon-picker-item i {
+    font-size: 20px;
+    color: rgba(255,255,255,0.7);
+    transition: color 0.16s;
+}
+.icon-picker-item:hover i,
+.icon-picker-item.selected i {
+    color: #c5a059;
+}
+.icon-picker-item span {
+    font-size: 8px;
+    color: rgba(255,255,255,0.3);
+    font-family: monospace;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    text-align: center;
+}
+
 
 /* =========================================
    لوحة الإدارة - موبايل
