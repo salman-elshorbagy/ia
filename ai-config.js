@@ -36,12 +36,6 @@ const AI_CONFIG = {
 };
 
 const AI_GRADE_MAP = {
-    '1-mid': 'مستوى المبتدئ',
-    '2-mid': 'مستوى المتوسط',
-    '3-mid': 'مستوى المتقدم',
-    '1-sec': 'Python & البرمجة',
-    '2-sec': 'Web Development',
-    '3-sec': 'AI & Machine Learning'
 };
 
 // ─── System Prompt الأساسي ─────────────────────────────────
