@@ -171,13 +171,50 @@
             </div>
         </div>
 
-        <div class="flex flex-col text-left mr-2">
-            <h2 class="font-black text-xs md:text-base italic leading-tight" style="color:#c5a059;letter-spacing:0.01em;">
-                منصة Salman للبرمجة
-            </h2>
-            <span style="font-size:8px;color:rgba(255,255,255,0.25);font-weight:700;letter-spacing:2px;margin-top:2px;font-family:'Space Mono',monospace;border-top:1px solid rgba(197,160,89,0.15);padding-top:2px;">
-                BY: SALMAN EL-SHORBAGY
-            </span>
+        <!-- ====== أزرار الترتيب والفلتر في الهيدر ====== -->
+        <div style="display:flex;align-items:center;gap:7px;">
+
+            <!-- زرار "لم تُشاهَد" -->
+            <button id="unwatched-filter-btn" onclick="toggleUnwatchedFilter()" title="غير المشاهَد فقط"
+                style="width:36px;height:36px;border-radius:11px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.5);cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;transition:all 0.22s;flex-shrink:0;">
+                <i class="fas fa-eye-slash"></i>
+            </button>
+
+            <!-- زرار الترتيب (dropdown) -->
+            <div style="position:relative;">
+                <button id="sort-order-btn" onclick="toggleSortDropdown(event)" title="الأحدث أولاً"
+                    style="width:36px;height:36px;border-radius:11px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.5);cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;transition:all 0.22s;flex-shrink:0;position:relative;">
+                    <i class="fas fa-sort-amount-down"></i>
+                </button>
+                <!-- Dropdown الترتيب -->
+                <div id="sort-dropdown-menu"
+                    style="display:none;position:absolute;top:calc(100% + 8px);left:0;z-index:9999;background:#111827;border:1px solid rgba(197,160,89,0.2);border-radius:16px;padding:6px;min-width:168px;box-shadow:0 20px 50px rgba(0,0,0,0.65);backdrop-filter:blur(12px);">
+                    <button onclick="applySortOrder('desc')"
+                        style="width:100%;background:none;border:none;color:white;font-family:'Cairo',sans-serif;font-size:12px;font-weight:700;padding:9px 13px;border-radius:10px;cursor:pointer;display:flex;align-items:center;gap:8px;transition:background 0.15s;"
+                        onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='none'">
+                        <i id="sort-desc-check" class="fas fa-check" style="color:#c5a059;font-size:10px;"></i>
+                        <i class="fas fa-arrow-down" style="color:rgba(197,160,89,0.6);font-size:11px;"></i>
+                        الأحدث أولاً
+                    </button>
+                    <button onclick="applySortOrder('asc')"
+                        style="width:100%;background:none;border:none;color:white;font-family:'Cairo',sans-serif;font-size:12px;font-weight:700;padding:9px 13px;border-radius:10px;cursor:pointer;display:flex;align-items:center;gap:8px;transition:background 0.15s;"
+                        onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='none'">
+                        <i id="sort-asc-check" class="fas fa-check" style="color:#c5a059;font-size:10px;display:none;"></i>
+                        <i class="fas fa-arrow-up" style="color:rgba(197,160,89,0.6);font-size:11px;"></i>
+                        الأقدم أولاً
+                    </button>
+                </div>
+            </div>
+
+            <!-- عنوان المنصة -->
+            <div class="flex flex-col text-left">
+                <h2 class="font-black text-xs md:text-base italic leading-tight" style="color:#c5a059;letter-spacing:0.01em;">
+                    منصة Salman للبرمجة
+                </h2>
+                <span style="font-size:8px;color:rgba(255,255,255,0.25);font-weight:700;letter-spacing:2px;margin-top:2px;font-family:'Space Mono',monospace;border-top:1px solid rgba(197,160,89,0.15);padding-top:2px;">
+                    BY: SALMAN EL-SHORBAGY
+                </span>
+            </div>
         </div>
     </div>
 </header>

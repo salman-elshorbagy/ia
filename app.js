@@ -17,6 +17,10 @@ let allLessonsData = { videos: [], images: [] };
 let watchedLessons = new Set();
 // التاب الحالي في الصفحة الرئيسية
 let currentContentTab = 'all';
+// ترتيب العرض: 'asc' = الأقدم أولاً (الافتراضي)، 'desc' = الأحدث أولاً
+let currentSortOrder = 'asc';
+// فلتر "لم تُشاهَد"
+let showUnwatchedOnly = false;
 // الصف الحالي في لوحة الأدمن
 let adminCurrentGrade = null;
 
@@ -914,11 +918,15 @@ async function selectGrade(id, name) {
     const searchInput = document.getElementById('search-input');
     if (searchInput) searchInput.value = "";
 
-    // إعادة ضبط التاب عند تغيير القسم
+    // إعادة ضبط التاب والترتيب والفلتر عند تغيير القسم
     currentContentTab = 'all';
+    currentSortOrder = 'asc';
+    showUnwatchedOnly = false;
     document.querySelectorAll('.content-tab-btn').forEach(b => b.classList.remove('active'));
     const tabAll = document.getElementById('tab-all');
     if (tabAll) tabAll.classList.add('active');
+    _updateSortBtn();
+    _updateUnwatchedBtn();
 
     const sectionName = name || getSectionName(id);
     document.getElementById('grade-title').innerText = 'محتوى ' + sectionName;
@@ -983,15 +991,7 @@ function loadLessons(grade) {
                 }
             });
 
-            // ترتيب من الأحدث للأقدم في الذاكرة
-            const sortByTime = (a, b) => {
-                const ta = a.createdAt?.toMillis?.() || 0;
-                const tb = b.createdAt?.toMillis?.() || 0;
-                return tb - ta;
-            };
-            videos.sort(sortByTime);
-            images.sort(sortByTime);
-
+            // تخزين البيانات الخام بدون ترتيب — الترتيب يتم في renderLessons
             allLessonsData = { videos, images };
             renderLessons();
         });
@@ -1002,7 +1002,22 @@ function loadLessons(grade) {
 // ============================================
 function renderLessons() {
     const grid = document.getElementById('lesson-grid');
-    const { videos, images } = allLessonsData;
+    let { videos, images } = allLessonsData;
+
+    // ── تطبيق الترتيب ──
+    const sortFn = (a, b) => {
+        const ta = a.createdAt?.toMillis?.() || 0;
+        const tb = b.createdAt?.toMillis?.() || 0;
+        return currentSortOrder === 'asc' ? ta - tb : tb - ta;
+    };
+    videos = [...videos].sort(sortFn);
+    images = [...images].sort(sortFn);
+
+    // ── تطبيق فلتر "لم تُشاهَد" ──
+    if (showUnwatchedOnly) {
+        videos = videos.filter(v => !watchedLessons.has(v._id));
+        images = images.filter(v => !watchedLessons.has(v._id));
+    }
 
     const showVideos = currentContentTab === 'all' || currentContentTab === 'video';
     const showImages = currentContentTab === 'all' || currentContentTab === 'image';
@@ -1011,19 +1026,20 @@ function renderLessons() {
     const filteredImages = showImages ? images : [];
 
     if (filteredVideos.length === 0 && filteredImages.length === 0) {
-        const msg = currentContentTab === 'video'
-            ? 'لا توجد فيديوهات في هذا القسم بعد'
-            : currentContentTab === 'image'
-                ? 'لا توجد صور أو مواد في هذا الصف بعد'
-                : 'لا توجد محتويات في هذا الصف بعد';
-        grid.innerHTML = `<div class="no-lessons-msg"><i class="fas fa-film"></i><p>${msg}</p></div>`;
+        const msg = showUnwatchedOnly
+            ? 'ماشاء الله! شاهدت كل المحتوى في هذا القسم 🎉'
+            : currentContentTab === 'video'
+                ? 'لا توجد فيديوهات في هذا القسم بعد'
+                : currentContentTab === 'image'
+                    ? 'لا توجد صور أو مواد في هذا الصف بعد'
+                    : 'لا توجد محتويات في هذا الصف بعد';
+        grid.innerHTML = `<div class="no-lessons-msg"><i class="fas fa-${showUnwatchedOnly ? 'check-circle' : 'film'}"></i><p>${msg}</p></div>`;
         return;
     }
 
     grid.innerHTML = '';
 
     if (currentContentTab === 'all') {
-        // عرض الفيديوهات أولاً مع عنوان القسم
         if (filteredVideos.length > 0) {
             const videoHeader = document.createElement('div');
             videoHeader.className = 'section-header';
@@ -1036,7 +1052,6 @@ function renderLessons() {
             grid.appendChild(videoGrid);
         }
 
-        // ثم الصور مع عنوان القسم
         if (filteredImages.length > 0) {
             const imageHeader = document.createElement('div');
             imageHeader.className = 'section-header';
@@ -1049,7 +1064,6 @@ function renderLessons() {
             grid.appendChild(imageGrid);
         }
     } else {
-        // تاب منفرد - بدون عنوان قسم
         const cardGrid = document.createElement('div');
         cardGrid.className = 'cards-grid';
         const items = currentContentTab === 'video' ? filteredVideos : filteredImages;
@@ -1064,29 +1078,107 @@ function renderLessons() {
 function switchContentTab(tab) {
     currentContentTab = tab;
 
-    // تحديث مظهر الأزرار
     ['all', 'video', 'image'].forEach(t => {
         const btn = document.getElementById('tab-' + t);
-        if (btn) {
-            if (t === tab) {
-                btn.classList.add('active');
-            } else {
-                btn.classList.remove('active');
-            }
-        }
+        if (btn) btn.classList.toggle('active', t === tab);
     });
 
-    // إعادة رسم القائمة
     renderLessons();
 
-    // مسح البحث
     const searchInput = document.getElementById('search-input');
     if (searchInput) searchInput.value = '';
 }
 
 // ============================================
-//  إنشاء كارت الدرس
+//  الترتيب وفلتر "لم تُشاهَد"
 // ============================================
+
+// تحديث مظهر زرار الترتيب
+function _updateSortBtn() {
+    const btn = document.getElementById('sort-order-btn');
+    if (!btn) return;
+    const isAsc = currentSortOrder === 'asc';
+    btn.title = isAsc ? 'الأقدم أولاً' : 'الأحدث أولاً';
+    btn.querySelector('span')?.remove?.();
+    const dot = document.createElement('span');
+    dot.style.cssText = 'position:absolute;top:4px;right:4px;width:5px;height:5px;border-radius:50%;background:#c5a059;display:block;';
+    // dot يظهر فقط لما الترتيب غير الافتراضي
+    if (!isAsc) btn.appendChild(dot);
+    else dot.remove?.();
+}
+
+// تحديث مظهر زرار الفلتر
+function _updateUnwatchedBtn() {
+    const btn = document.getElementById('unwatched-filter-btn');
+    if (!btn) return;
+    if (showUnwatchedOnly) {
+        btn.style.background = 'rgba(197,160,89,0.2)';
+        btn.style.borderColor = 'rgba(197,160,89,0.5)';
+        btn.style.color = '#c5a059';
+    } else {
+        btn.style.background = 'rgba(255,255,255,0.05)';
+        btn.style.borderColor = 'rgba(255,255,255,0.1)';
+        btn.style.color = 'rgba(255,255,255,0.5)';
+    }
+}
+
+// فتح/إغلاق dropdown الترتيب
+function toggleSortDropdown(e) {
+    e.stopPropagation();
+    const menu = document.getElementById('sort-dropdown-menu');
+    if (!menu) return;
+    const isOpen = menu.style.display === 'block';
+    menu.style.display = isOpen ? 'none' : 'block';
+    if (!isOpen) {
+        setTimeout(() => {
+            document.addEventListener('click', _closeSortDropdown, { once: true });
+        }, 10);
+    }
+}
+
+function _closeSortDropdown() {
+    const menu = document.getElementById('sort-dropdown-menu');
+    if (menu) menu.style.display = 'none';
+}
+
+// تطبيق الترتيب
+function applySortOrder(order) {
+    currentSortOrder = order;
+    _closeSortDropdown();
+
+    // تحديث علامة الاختيار في الـ dropdown
+    const ascCheck  = document.getElementById('sort-asc-check');
+    const descCheck = document.getElementById('sort-desc-check');
+    if (ascCheck)  ascCheck.style.display  = order === 'asc'  ? '' : 'none';
+    if (descCheck) descCheck.style.display = order === 'desc' ? '' : 'none';
+
+    // تحديث لون زرار الترتيب لما يكون غير الافتراضي
+    const btn = document.getElementById('sort-order-btn');
+    if (btn) {
+        if (order === 'desc') {
+            btn.style.borderColor = 'rgba(197,160,89,0.4)';
+            btn.style.color = '#c5a059';
+            btn.style.background = 'rgba(197,160,89,0.08)';
+        } else {
+            btn.style.borderColor = 'rgba(255,255,255,0.1)';
+            btn.style.color = 'rgba(255,255,255,0.5)';
+            btn.style.background = 'rgba(255,255,255,0.05)';
+        }
+    }
+
+    renderLessons();
+    const si = document.getElementById('search-input');
+    if (si) si.value = '';
+}
+
+// تبديل فلتر "لم تُشاهَد"
+function toggleUnwatchedFilter() {
+    showUnwatchedOnly = !showUnwatchedOnly;
+    _updateUnwatchedBtn();
+    renderLessons();
+    const si = document.getElementById('search-input');
+    if (si) si.value = '';
+}
 function createCard(item, type) {
     const lessonId = item._id;
     const thumbnailUrl = getThumbnailUrl(item.url);
@@ -2557,6 +2649,41 @@ async function submitModalRating(lessonId, val) {
 // ============================================
 let replyingTo = null;
 
+// ── تحويل الروابط لـ clickable links ──────────
+function linkifyText(text) {
+    if (!text) return '';
+    const urlRegex = /(https?:\/\/[^\s<>"'،]+|www\.[^\s<>"'،]+|\S+\.(com|net|org|io|dev|app|co|ai|me|info|edu|gov|ly|link|site|online|store|shop|tech|blog|page)[^\s<>"'،]*)/gi;
+    return text.replace(urlRegex, (url) => {
+        let href = url;
+        if (!href.startsWith('http')) href = 'https://' + href;
+        const display = url.length > 42 ? url.substring(0, 39) + '...' : url;
+        return `<a href="${href}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" style="color:#60a5fa;text-decoration:underline;word-break:break-all;font-weight:700;">${display}</a>`;
+    });
+}
+
+// ── تثبيت/إلغاء تثبيت التعليق (للمطوّر فقط) ──
+// السبب: Firestore rules لا تسمح بـ update على comments/messages
+// الحل: نخزّن التثبيت في lessons/{lessonId} حيث المطوّر يملك update مؤكداً
+async function pinComment(lessonId, commentId, currentlyPinned) {
+    document.querySelectorAll('.cmt-dots-menu').forEach(m => m.style.display = 'none');
+    try {
+        const fieldPath = 'pinnedComments.' + commentId;
+        const newValue = currentlyPinned
+            ? firebase.firestore.FieldValue.delete()
+            : true;
+        await db.collection('lessons').doc(lessonId).update({ [fieldPath]: newValue });
+        showToast(currentlyPinned ? 'تم إلغاء التثبيت' : 'تم تثبيت التعليق 📌');
+    } catch(e) {
+        showToast('حدث خطأ أثناء التثبيت', 'error');
+        console.error('[pinComment]', e);
+    }
+}
+
+// ── إغلاق قوائم الثلاث نقاط عند الضغط خارجها ──
+document.addEventListener('click', () => {
+    document.querySelectorAll('.cmt-dots-menu').forEach(m => m.style.display = 'none');
+});
+
 // *** إصلاح Bug 2: نظام الإصدارات بدلاً من الـ lock ***
 // كل مرة بنطلب render جديد، رقم الإصدار بيزيد
 // الـ render القديم لو اتأخر مش هيحدث الـ DOM عشان رقمه بقى قديم
@@ -2617,11 +2744,32 @@ async function doRenderComments(lessonId, snap) {
         let totalCount = snap.size;
         let html = '';
 
-        for (const doc of snap.docs) {
+        // ── جلب خريطة التثبيت من lessons (حيث نخزّنها لتجاوز قيود Firestore rules) ──
+        let pinnedCommentsMap = {};
+        try {
+            const lessonDocSnap = await db.collection('lessons').doc(lessonId).get();
+            if (lessonDocSnap.exists) {
+                pinnedCommentsMap = lessonDocSnap.data()?.pinnedComments || {};
+            }
+        } catch(e) {
+            console.warn('[doRenderComments] fetch pins failed:', e);
+        }
+
+        // ── ترتيب التعليقات: المثبتة أولاً، ثم الأقدم ──
+        const sortedDocs = [...snap.docs].sort((a, b) => {
+            const aPinned = pinnedCommentsMap[a.id] === true ? 1 : 0;
+            const bPinned = pinnedCommentsMap[b.id] === true ? 1 : 0;
+            if (bPinned !== aPinned) return bPinned - aPinned;
+            const ta = a.data().createdAt?.toMillis?.() || 0;
+            const tb = b.data().createdAt?.toMillis?.() || 0;
+            return ta - tb;
+        });
+
+        for (const doc of sortedDocs) {
             const d = doc.data();
+            const isPinned = pinnedCommentsMap[doc.id] === true;
             const timeAgo = d.createdAt ? formatTimeAgo(d.createdAt.toDate()) : '';
             const isMe = d.email === myEmail;
-            // الاسم: لو التعليق للمستخدم الحالي استخدم اسمه الجديد
             const commentName = (isMe && myCurrentName) ? myCurrentName : (d.displayName || 'مجهول');
             const canDelete = isMe || isMaster;
             const nameClickable = isMaster
@@ -2631,13 +2779,36 @@ async function doRenderComments(lessonId, snap) {
                 ? `<span style="background:rgba(239,68,68,0.1);color:#ef4444;font-size:9px;padding:1px 5px;border-radius:10px;font-family:Cairo,sans-serif;" title="${d.email}">👁</span>`
                 : '';
 
-            // جلب الردود وبناء مصفوفة HTML (بدل string واحد)
+            // شارة "مثبّت" تظهر للجميع
+            const pinnedBadge = isPinned
+                ? `<span style="background:rgba(197,160,89,0.15);color:#c5a059;font-size:9px;padding:1px 7px;border-radius:20px;font-family:Cairo,sans-serif;display:inline-flex;align-items:center;gap:3px;"><i class="fas fa-thumbtack" style="font-size:8px;"></i> مثبّت</span>`
+                : '';
+
+            // زرار الثلاث نقاط — للمطوّر فقط
+            const dotsMenuHtml = isMaster ? `
+                <div style="position:relative;flex-shrink:0;align-self:flex-start;">
+                    <button onclick="event.stopPropagation();var m=document.getElementById('cmt-menu-${doc.id}');document.querySelectorAll('.cmt-dots-menu').forEach(x=>x!==m&&(x.style.display='none'));m.style.display=m.style.display==='block'?'none':'block';"
+                        style="background:none;border:none;color:rgba(255,255,255,0.3);cursor:pointer;font-size:14px;padding:2px 5px;line-height:1;border-radius:6px;transition:color 0.2s;"
+                        onmouseover="this.style.color='rgba(255,255,255,0.7)'" onmouseout="this.style.color='rgba(255,255,255,0.3)'">
+                        <i class="fas fa-ellipsis-v"></i>
+                    </button>
+                    <div id="cmt-menu-${doc.id}" class="cmt-dots-menu"
+                        style="display:none;position:absolute;top:100%;left:0;z-index:9999;background:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:5px;min-width:130px;box-shadow:0 12px 32px rgba(0,0,0,0.6);white-space:nowrap;">
+                        <button onclick="pinComment('${lessonId}','${doc.id}',${isPinned})"
+                            style="width:100%;background:none;border:none;color:${isPinned?'#ef4444':'#c5a059'};font-family:'Cairo',sans-serif;font-size:11px;font-weight:700;padding:8px 12px;border-radius:8px;cursor:pointer;display:flex;align-items:center;gap:7px;transition:background 0.15s;"
+                            onmouseover="this.style.background='rgba(255,255,255,0.07)'" onmouseout="this.style.background='none'">
+                            <i class="fas fa-thumbtack" style="font-size:10px;"></i>
+                            ${isPinned ? 'إلغاء التثبيت' : 'تثبيت في الأعلى'}
+                        </button>
+                    </div>
+                </div>` : '';
+
+            // جلب الردود وبناء مصفوفة HTML
             const repliesSnap = await db.collection('comments').doc(lessonId)
                 .collection('messages').doc(doc.id)
                 .collection('replies').orderBy('createdAt','asc').get();
             totalCount += repliesSnap.size;
 
-            // بناء مصفوفة HTML لكل رد على حدة وتخزينها في الكاش
             const repliesArr = [];
             repliesSnap.forEach(rDoc => {
                 const r = rDoc.data();
@@ -2649,19 +2820,11 @@ async function doRenderComments(lessonId, snap) {
                     : '';
 
                 const quoteBox = (r.replyToName && r.replyToText)
-                    ? `<div style="
-                            border-right: 3px solid #c5a059;
-                            background: rgba(197,160,89,0.07);
-                            border-radius: 8px;
-                            padding: 5px 9px;
-                            margin-bottom: 5px;
-                            max-width: 100%;
-                        ">
+                    ? `<div style="border-right:3px solid #c5a059;background:rgba(197,160,89,0.07);border-radius:8px;padding:5px 9px;margin-bottom:5px;max-width:100%;">
                             <span style="color:#c5a059;font-family:'Cairo',sans-serif;font-size:10px;font-weight:900;display:block;margin-bottom:1px;">
                                 <i class="fas fa-reply" style="font-size:9px;margin-left:3px;"></i>${r.replyToName}
                             </span>
-                            <span style="color:rgba(255,255,255,0.4);font-family:'Cairo',sans-serif;font-size:10px;
-                                         display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;">
+                            <span style="color:rgba(255,255,255,0.4);font-family:'Cairo',sans-serif;font-size:10px;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;">
                                 ${r.replyToText}
                             </span>
                        </div>`
@@ -2683,7 +2846,7 @@ async function doRenderComments(lessonId, snap) {
                             <span style="color:rgba(255,255,255,0.2);font-size:9px;font-family:Cairo,sans-serif;margin-right:auto;">${rTime}</span>
                         </div>
                         ${quoteBox}
-                        <p style="color:rgba(255,255,255,0.78);font-family:'Cairo',sans-serif;font-size:11px;margin:0 0 5px;line-height:1.55;">${r.text}</p>
+                        <p style="color:rgba(255,255,255,0.78);font-family:'Cairo',sans-serif;font-size:11px;margin:0 0 5px;line-height:1.55;">${linkifyText(r.text)}</p>
                         <button onclick="startReply('${doc.id}','${escapedRName}','${escapedRText}','${rDoc.id}')"
                             style="background:none;border:none;color:rgba(197,160,89,0.5);font-family:'Cairo',sans-serif;font-size:10px;font-weight:700;cursor:pointer;padding:0;display:flex;align-items:center;gap:3px;">
                             <i class="fas fa-reply" style="font-size:9px;"></i> رد
@@ -2693,11 +2856,9 @@ async function doRenderComments(lessonId, snap) {
                 </div>`);
             });
 
-            // تخزين في الكاش
             _repliesCache[doc.id] = repliesArr;
             const repliesCount = repliesArr.length;
 
-            // بناء منطقة الردود (زرار التبديل + الحاوية المخفية)
             const repliesToggleHtml = repliesCount > 0 ? `
                 <div style="margin-top:6px;">
                     <button id="replies-toggle-btn-${doc.id}" onclick="toggleReplies('${doc.id}')"
@@ -2714,13 +2875,17 @@ async function doRenderComments(lessonId, snap) {
                     </button>
                 </div>` : '';
 
-            // زرار الرد على التعليق الأصلي
             const escapedDName = (d.displayName||'').replace(/'/g,"\\'").replace(/"/g,'&quot;');
             const escapedDText = (d.text||'').replace(/'/g,"\\'").replace(/"/g,'&quot;').substring(0,80);
 
+            // خلفية مميزة للتعليق المثبّت
+            const pinnedBg = isPinned
+                ? 'background:linear-gradient(135deg,rgba(197,160,89,0.07),rgba(197,160,89,0.03));border-right:3px solid rgba(197,160,89,0.5);'
+                : (isMe ? 'background:rgba(197,160,89,0.03);' : '');
+
             html += `
             <div style="border-bottom:1px solid rgba(255,255,255,0.05);">
-                <div style="display:flex;gap:10px;padding:12px 14px;${isMe?'background:rgba(197,160,89,0.03);':''}">
+                <div style="display:flex;gap:10px;padding:12px 14px;${pinnedBg}">
                     <img src="${d.avatar||''}" referrerpolicy="no-referrer"
                          style="width:32px;height:32px;border-radius:10px;object-fit:cover;flex-shrink:0;border:1px solid rgba(255,255,255,0.1);margin-top:1px;"
                          onerror="this.onerror=null;this.src=''">
@@ -2729,16 +2894,20 @@ async function doRenderComments(lessonId, snap) {
                             <span ${nameClickable} style="color:${isMe?'#c5a059':'white'};font-family:'Cairo',sans-serif;font-weight:900;font-size:12px;">${commentName}</span>
                             ${isMe ? '<span style="background:rgba(197,160,89,0.15);color:#c5a059;font-size:9px;padding:1px 6px;border-radius:20px;font-family:Cairo,sans-serif;">أنت</span>' : ''}
                             ${masterBadge}
+                            ${pinnedBadge}
                             <span style="color:rgba(255,255,255,0.2);font-size:10px;font-family:Cairo,sans-serif;margin-right:auto;">${timeAgo}</span>
                         </div>
-                        <p style="color:rgba(255,255,255,0.82);font-family:'Cairo',sans-serif;font-size:12px;margin:0 0 8px;line-height:1.6;">${d.text}</p>
+                        <p style="color:rgba(255,255,255,0.82);font-family:'Cairo',sans-serif;font-size:12px;margin:0 0 8px;line-height:1.6;">${linkifyText(d.text)}</p>
                         <button onclick="startReply('${doc.id}','${escapedDName}','${escapedDText}')"
                             style="background:none;border:none;color:rgba(197,160,89,0.6);font-family:'Cairo',sans-serif;font-size:11px;font-weight:700;cursor:pointer;padding:0;display:flex;align-items:center;gap:4px;">
                             <i class="fas fa-reply" style="font-size:10px;"></i> رد
                         </button>
                         ${repliesToggleHtml}
                     </div>
-                    ${canDelete ? `<button onclick="deleteComment('${lessonId}','${doc.id}')" style="background:none;border:none;color:rgba(239,68,68,0.4);cursor:pointer;font-size:12px;padding:0 2px;flex-shrink:0;align-self:flex-start;"><i class="fas fa-trash-alt"></i></button>` : ''}
+                    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0;">
+                        ${dotsMenuHtml}
+                        ${canDelete ? `<button onclick="deleteComment('${lessonId}','${doc.id}')" style="background:none;border:none;color:rgba(239,68,68,0.4);cursor:pointer;font-size:12px;padding:0 2px;"><i class="fas fa-trash-alt"></i></button>` : ''}
+                    </div>
                 </div>
             </div>`;
         }

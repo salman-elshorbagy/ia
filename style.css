@@ -1527,3 +1527,43 @@ body {
 
 /* إخفاء الـ Swal toast القديم إذا بقي */
 .swal-top-always { display: none !important; }
+
+
+/* =========================================
+   أدوات الترتيب والفلتر
+   ========================================= */
+
+/* الـ dropdown على الموبايل — يظهر من اليمين */
+@media (max-width: 480px) {
+    #sort-dropdown-menu {
+        left: auto !important;
+        right: 0 !important;
+        min-width: 162px !important;
+    }
+}
+
+/* تأثير فتح الـ dropdown */
+#sort-dropdown-menu[style*="display: block"],
+#sort-dropdown-menu[style*="display:block"] {
+    animation: sortDropIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes sortDropIn {
+    from { opacity: 0; transform: translateY(-8px) scale(0.96); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* أزرار الفلتر والترتيب — hover موحّد */
+#unwatched-filter-btn:hover {
+    border-color: rgba(197,160,89,0.4) !important;
+    color: rgba(197,160,89,0.85) !important;
+}
+
+/* على الموبايل الصغير: الأزرار أصغر */
+@media (max-width: 360px) {
+    #unwatched-filter-btn,
+    #sort-order-btn {
+        width: 36px !important;
+        height: 36px !important;
+        border-radius: 10px !important;
+    }
+}
