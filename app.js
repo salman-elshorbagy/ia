@@ -1186,13 +1186,43 @@ function toggleSortDropdown(e) {
     e.stopPropagation();
     const menu = document.getElementById('sort-dropdown-menu');
     if (!menu) return;
-    const isOpen = menu.style.display === 'block';
-    menu.style.display = isOpen ? 'none' : 'block';
-    if (!isOpen) {
-        setTimeout(() => {
-            document.addEventListener('click', _closeSortDropdown, { once: true });
-        }, 10);
+
+    if (menu.style.display === 'block') { menu.style.display = 'none'; return; }
+
+    // ── smart positioning ──
+    const btn = document.getElementById('sort-order-btn');
+    // أظهر بدون visibility لقياس الحجم الفعلي
+    menu.style.visibility = 'hidden';
+    menu.style.display    = 'block';
+    menu.style.top = menu.style.bottom = menu.style.left = menu.style.right = '';
+
+    const mW = menu.offsetWidth  || 170;
+    const mH = menu.offsetHeight || 90;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const r  = btn.getBoundingClientRect();
+
+    // رأسي: لأسفل إن كانت المساحة كافية، وإلا لأعلى
+    if (vh - r.bottom >= mH + 8 || vh - r.bottom >= r.top) {
+        menu.style.top    = 'calc(100% + 6px)';
+        menu.style.bottom = 'auto';
+    } else {
+        menu.style.bottom = 'calc(100% + 6px)';
+        menu.style.top    = 'auto';
     }
+
+    // أفقي: لو في مساحة على اليمين → محاذاة يسار، وإلا → محاذاة يمين
+    if (r.left + mW <= vw - 4) {
+        menu.style.left  = '0';
+        menu.style.right = 'auto';
+    } else {
+        menu.style.right = '0';
+        menu.style.left  = 'auto';
+    }
+
+    menu.style.visibility = '';
+
+    setTimeout(() => document.addEventListener('click', _closeSortDropdown, { once: true }), 10);
 }
 
 function _closeSortDropdown() {
@@ -1238,6 +1268,14 @@ function toggleUnwatchedFilter() {
     const si = document.getElementById('search-input');
     if (si) si.value = '';
 }
+// ── Thumbnail fallback — بديل محلي بدون أي network request ──
+function _thumbFallback(isVid) {
+    const svg = isVid
+        ? '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><rect width="640" height="360" fill="#111827"/><circle cx="320" cy="180" r="50" fill="#c5a059" opacity=".15"/><polygon points="308,162 308,198 346,180" fill="#c5a059"/></svg>'
+        : '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><rect width="640" height="360" fill="#111827"/><rect x="256" y="131" width="128" height="98" rx="10" fill="none" stroke="#c5a059" stroke-width="2"/><line x1="295" y1="160" x2="345" y2="160" stroke="#c5a059" stroke-width="2"/><line x1="290" y1="175" x2="350" y2="175" stroke="#c5a059" stroke-width="2"/><line x1="290" y1="190" x2="350" y2="190" stroke="#c5a059" stroke-width="2"/></svg>';
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+}
+
 function createCard(item, type) {
     const lessonId = item._id;
     const thumbnailUrl = getThumbnailUrl(item.url);
@@ -1270,7 +1308,7 @@ function createCard(item, type) {
         <div class="card-media-box">
             <div class="video-preview-container">
                 <img src="${thumbnailUrl}" class="video-thumb-img" loading="lazy"
-                     onerror="this.src='https://via.placeholder.com/640x360/111827/c5a059?text=${isVideo ? '▶' : '🖼'}'">
+                     onerror="this.onerror=null;this.src=_thumbFallback(${isVideo})">
                 ${overlayIcon}
             </div>
         </div>

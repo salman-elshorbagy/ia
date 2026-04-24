@@ -1533,13 +1533,9 @@ body {
    أدوات الترتيب والفلتر
    ========================================= */
 
-/* الـ dropdown على الموبايل — يظهر من اليمين */
-@media (max-width: 480px) {
-    #sort-dropdown-menu {
-        left: auto !important;
-        right: 0 !important;
-        min-width: 162px !important;
-    }
+/* الـ dropdown — smart JS positioning يتولى الاتجاه، هنا فقط نضمن عدم تجاوز الشاشة */
+#sort-dropdown-menu {
+    max-width: calc(100vw - 12px);
 }
 
 /* تأثير فتح الـ dropdown */
